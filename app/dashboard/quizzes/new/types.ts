@@ -30,4 +30,5 @@ export interface QuizState {
   shuffle_questions: boolean;
   is_published: boolean;
   intro_fields: IntroField[]; // NEW: The dynamic form builder
+  show_results: boolean; // <-- NEW
 }

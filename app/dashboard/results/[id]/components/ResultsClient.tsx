@@ -1,75 +1,88 @@
 "use client";
 
+import { useMemo } from "react";
 import { Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import StatCards from "./StatCards";
 import SubmissionsTable from "./SubmissionsTable";
+import QuestionAnalytics from "./QuestionAnalytics";
 
 interface Props {
-  quiz: { title: string };
+  quiz: any;
   submissions: any[];
+  questions: any[];
 }
 
-export default function ResultsClient({ quiz, submissions }: Props) {
+export default function ResultsClient({ quiz, submissions, questions }: Props) {
+
+  // RANKING LOGIC: Sort by Score (Desc), then by Time Taken (Asc)
+  const rankedSubmissions = useMemo(() => {
+    return [...submissions]
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score; // Highest score first
+        // Tie-breaker: Lowest time first
+        return (a.time_taken_seconds || 999999) - (b.time_taken_seconds || 999999);
+      })
+      .map((sub, index) => ({ ...sub, rank: index + 1 })); // Assign Rank 1, 2, 3...
+  }, [submissions]);
 
   const handleExportToExcel = () => {
-    // 1. Format the raw database data into a clean structure for the spreadsheet
-    const excelData = submissions.map(sub => {
+    const excelData = rankedSubmissions.map(sub => {
       const percentage = Math.round((sub.score / sub.total_points) * 100);
-      return {
-        "Respondent Name": sub.respondent_name,
+      const minutes = Math.floor((sub.time_taken_seconds || 0) / 60);
+      const seconds = (sub.time_taken_seconds || 0) % 60;
+
+      let baseData: any = {
+        "Rank": sub.rank,
+        "Name": sub.respondent_name,
         "Score": sub.score,
         "Total Points": sub.total_points,
         "Percentage": `${percentage}%`,
+        "Time Taken": `${minutes}m ${seconds}s`,
         "Cheating Warnings": sub.cheat_warnings,
-        "Submission Date": new Date(sub.submitted_at).toLocaleDateString(),
-        "Submission Time": new Date(sub.submitted_at).toLocaleTimeString()
+        "Submitted": new Date(sub.submitted_at).toLocaleString()
       };
+
+      // Extract dynamic intro fields dynamically into the Excel!
+      if (sub.respondent_details) {
+        Object.entries(sub.respondent_details).forEach(([key, value]) => {
+          if (key !== 'default_name') baseData[`Custom: ${key}`] = value;
+        });
+      }
+
+      return baseData;
     });
 
-    // 2. Generate the worksheet and workbook
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
 
-    // 3. Adjust column widths for better readability in Excel
-    const wscols = [
-      { wch: 25 }, // Name
-      { wch: 10 }, // Score
-      { wch: 15 }, // Total
-      { wch: 15 }, // Percentage
-      { wch: 20 }, // Warnings
-      { wch: 20 }, // Date
-      { wch: 20 }, // Time
-    ];
-    worksheet["!cols"] = wscols;
-
+    worksheet["!cols"] = [ { wch: 5 }, { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 20 } ];
     XLSX.utils.book_append_sheet(workbook, worksheet, "Results");
 
-    // 4. Trigger the download using the Quiz Title as the filename
     const safeTitle = quiz.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     XLSX.writeFile(workbook, `${safeTitle}_results.xlsx`);
   };
 
   return (
     <div>
-      {/* Top Action Bar */}
       <div className="flex justify-end mb-6">
         <button
           onClick={handleExportToExcel}
           disabled={submissions.length === 0}
           className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
         >
-          <Download className="w-4 h-4" />
-          Export to Excel
+          <Download className="w-4 h-4" /> Export Leaderboard
         </button>
       </div>
 
-      {/* Analytics Components */}
-      <StatCards submissions={submissions} />
+      <StatCards submissions={rankedSubmissions} />
 
-      {/* Detailed Table */}
-      <h2 className="text-xl font-bold text-slate-900 mb-4">Detailed Submissions</h2>
-      <SubmissionsTable submissions={submissions} />
+      <h2 className="text-xl font-bold text-slate-900 mb-4 mt-8">Live Leaderboard</h2>
+      <SubmissionsTable submissions={rankedSubmissions} questions={questions} />
+
+      <div className="mt-12">
+        <QuestionAnalytics questions={questions} submissions={rankedSubmissions} />
+      </div>
     </div>
   );
 }

@@ -1,102 +1,88 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, Clock, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Lock, Clock, AlertTriangle, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
 import { submitQuizAndGrade } from "../actions";
 
 interface Option { id: string; option_text: string; }
 interface Question { id: string; question_text: string; points: number; options: Option[]; }
 interface IntroField { id: string; label: string; type: string; required: boolean; options?: string[]; }
 interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  time_limit_seconds: number | null;
-  require_password: boolean;
-  intro_fields?: IntroField[];
+  id: string; title: string; description: string;
+  time_limit_seconds: number | null; require_password: boolean;
+  intro_fields?: IntroField[]; show_results: boolean;
 }
 
 export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions: Question[] }) {
-  // --- STATE MANAGEMENT ---
   const [phase, setPhase] = useState<'gate' | 'intro' | 'active' | 'finished'>('gate');
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
-  // Test Data
-  const [answers, setAnswers] = useState<Record<string, string>>({}); // { questionId: optionId }
-
-  // Timer is now directly in seconds from the database
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(quiz.time_limit_seconds || null);
 
+  // --- NEW: Time Tracking & Warning Modal States ---
+  const [startTime, setStartTime] = useState<number>(0);
   const [warnings, setWarnings] = useState(0);
+  const [warningModal, setWarningModal] = useState<{ show: boolean, currentCount: number } | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
-
-  // Dynamic Intro Form State
   const [introDetails, setIntroDetails] = useState<Record<string, string>>({});
 
   const MAX_WARNINGS = 3;
 
-  // --- HELPER: Extract Name ---
-  // Tries to find a field named "name" to use for the UI, otherwise uses a default
   const getDisplayName = useCallback(() => {
-    // Check if we used the fallback field
     if (introDetails['default_name']) return introDetails['default_name'];
-
-    // Otherwise look through dynamic fields
     const nameField = quiz.intro_fields?.find(f => f.label.toLowerCase().includes("name"));
-    if (nameField && introDetails[nameField.id]) {
-      return introDetails[nameField.id];
-    }
-
+    if (nameField && introDetails[nameField.id]) return introDetails[nameField.id];
     return "Respondent";
   }, [introDetails, quiz.intro_fields]);
 
-  // --- SUBMISSION LOGIC ---
   const handleComplete = useCallback(async (forced: boolean = false) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    // Exit full screen if active
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
 
     const respondentName = getDisplayName();
 
-    // Pass introDetails (the JSON) as the 5th parameter
-    const res = await submitQuizAndGrade(quiz.id, respondentName, answers, warnings, introDetails);
+    // Calculate exact time taken in seconds
+    const timeTakenSeconds = Math.floor((Date.now() - startTime) / 1000);
+
+    const res = await submitQuizAndGrade(quiz.id, respondentName, answers, warnings, introDetails, timeTakenSeconds);
 
     if (res.success) {
       setResult({ score: res.score!, total: res.totalPoints! });
       setPhase('finished');
+      setWarningModal(null); // Clear any open warnings
     } else {
       alert("Error submitting quiz. Please notify your instructor.");
     }
     setIsSubmitting(false);
-  }, [answers, introDetails, isSubmitting, quiz.id, warnings, getDisplayName]);
+  }, [answers, introDetails, isSubmitting, quiz.id, warnings, getDisplayName, startTime]);
 
-  // --- PROCTORING EFFECTS ---
   useEffect(() => {
     if (phase !== 'active') return;
 
-    // 1. Timer Logic
     let timer: NodeJS.Timeout;
     if (timeLeft !== null && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft(prev => prev! - 1), 1000);
     } else if (timeLeft === 0) {
-      handleComplete(true); // Auto-submit when time is up
+      handleComplete(true);
     }
 
-    // 2. Tab Switching Detection (Anti-Cheat)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         setWarnings(prev => {
           const newCount = prev + 1;
           if (newCount >= MAX_WARNINGS) {
-             handleComplete(true); // Auto-terminate if they cheat too much
+             handleComplete(true);
           } else {
-             alert(`WARNING: You left the quiz tab. This is warning ${newCount} of ${MAX_WARNINGS}. Your test will be auto-submitted if you continue.`);
+             // Show Modern Warning Modal instead of alert()
+             setWarningModal({ show: true, currentCount: newCount });
           }
           return newCount;
         });
@@ -104,7 +90,6 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // 3. Disable Copy/Paste and Right Click
     const disableContext = (e: Event) => e.preventDefault();
     document.addEventListener("contextmenu", disableContext);
     document.addEventListener("copy", disableContext);
@@ -117,13 +102,9 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     };
   }, [phase, timeLeft, handleComplete]);
 
-  // --- HANDLERS ---
   const startQuiz = async () => {
-    try {
-      await document.documentElement.requestFullscreen();
-    } catch (e) {
-      console.log("Fullscreen denied or unsupported");
-    }
+    try { await document.documentElement.requestFullscreen(); } catch (e) {}
+    setStartTime(Date.now()); // START THE CLOCK
     setPhase('active');
   };
 
@@ -132,7 +113,6 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     setPhase('intro');
   };
 
-  // --- RENDER HELPERS ---
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -154,75 +134,40 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
         <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
           <h1 className="text-2xl font-bold text-slate-900 mb-2">{quiz.title}</h1>
           <p className="text-slate-600 mb-6 text-sm">{quiz.description}</p>
-
-          {authError && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg">{authError}</div>}
-
           <form onSubmit={handleGateSubmit} className="space-y-4">
-
-            {/* Fallback if teacher forgot to add intro fields */}
             {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={introDetails['default_name'] || ""}
-                  onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
-                />
+                <input type="text" required value={introDetails['default_name'] || ""} onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
               </div>
             )}
-
-            {/* Map through the dynamic fields created by the teacher */}
             {quiz.intro_fields?.map((field) => (
               <div key={field.id}>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {field.label} {field.required && '*'}
-                </label>
-
+                <label className="block text-sm font-medium text-slate-700 mb-1">{field.label} {field.required && '*'}</label>
                 {field.type === 'select' ? (
-                  <select
-                    required={field.required}
-                    value={introDetails[field.id] || ""}
-                    onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})}
-                    className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none bg-white"
-                  >
+                  <select required={field.required} value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none bg-white">
                     <option value="" disabled>Select an option...</option>
-                    {field.options?.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
+                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                   </select>
                 ) : (
-                  <input
-                    type={field.type}
-                    required={field.required}
-                    value={introDetails[field.id] || ""}
-                    onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})}
-                    className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
-                  />
+                  <input type={field.type} required={field.required} value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
                 )}
               </div>
             ))}
-
             {quiz.require_password && (
               <div className="pt-4 border-t border-slate-100 mt-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Quiz Password</label>
-                <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
-                />
+                <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
               </div>
             )}
-
-            <button type="submit" className="w-full py-3 mt-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-              Continue
-            </button>
+            <button type="submit" className="w-full py-3 mt-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">Continue</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // 2. INTRO / PROCTORING RULES VIEW
+  // 2. INTRO VIEW
   if (phase === 'intro') {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
@@ -231,17 +176,13 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
             <ShieldAlert className="w-8 h-8 text-blue-600" />
             <h2 className="text-2xl font-bold text-slate-900">Proctored Examination Rules</h2>
           </div>
-
           <ul className="space-y-4 mb-8 text-slate-700">
             <li className="flex gap-3"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /> <strong>Identity:</strong> You are taking this test as {getDisplayName()}.</li>
-            <li className="flex gap-3"><Clock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Time Limit:</strong> {quiz.time_limit_seconds ? `${formatTimeText(quiz.time_limit_seconds)}. The test auto-submits when time expires.` : 'No time limit.'}</li>
-            <li className="flex gap-3"><Lock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Fullscreen Required:</strong> Starting the test will put your browser in full screen mode.</li>
-            <li className="flex gap-3"><AlertTriangle className="w-6 h-6 text-orange-500 shrink-0" /> <strong>Anti-Cheat Active:</strong> Switching tabs, opening other apps, or copying text will be recorded. You have {MAX_WARNINGS} warnings before instant termination.</li>
+            <li className="flex gap-3"><Clock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Time Limit:</strong> {quiz.time_limit_seconds ? `${formatTimeText(quiz.time_limit_seconds)}. Test auto-submits when time expires.` : 'No time limit.'}</li>
+            <li className="flex gap-3"><Lock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Fullscreen Required:</strong> Browser will enter full screen mode.</li>
+            <li className="flex gap-3"><AlertTriangle className="w-6 h-6 text-orange-500 shrink-0" /> <strong>Anti-Cheat Active:</strong> Switching tabs or apps is recorded. You have {MAX_WARNINGS} warnings before instant termination.</li>
           </ul>
-
-          <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors text-lg">
-            I Agree, Start Test
-          </button>
+          <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors text-lg">I Agree, Start Test</button>
         </div>
       </div>
     );
@@ -256,10 +197,17 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
           <h2 className="text-3xl font-bold text-slate-900 mb-2">Test Submitted!</h2>
           <p className="text-slate-600 mb-6">Thank you, {getDisplayName()}. Your responses have been recorded safely.</p>
 
-          {result && (
-            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-              <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Your Score</p>
-              <p className="text-4xl font-extrabold text-blue-600 mt-2">{result.score} <span className="text-xl text-slate-400">/ {result.total}</span></p>
+          {/* Only show result if the creator enabled it */}
+          {quiz.show_results ? (
+            result && (
+              <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Your Score</p>
+                <p className="text-4xl font-extrabold text-blue-600 mt-2">{result.score} <span className="text-xl text-slate-400">/ {result.total}</span></p>
+              </div>
+            )
+          ) : (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
+              Results are hidden for this quiz. Contact your instructor for your final grade.
             </div>
           )}
         </div>
@@ -269,7 +217,33 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
 
   // 4. ACTIVE TEST VIEW
   return (
-    <div className="pb-32 select-none">
+    <div className="pb-32 select-none relative">
+
+      {/* --- MODERN WARNING MODAL --- */}
+      {warningModal?.show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-2 border-red-500">
+            <div className="bg-red-50 p-6 text-center border-b border-red-100">
+              <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-red-700">Proctoring Warning!</h3>
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-slate-700 mb-2 font-medium">
+                You navigated away from the quiz tab. This is considered suspicious behavior.
+              </p>
+              <p className="text-red-600 font-bold text-lg mb-6">
+                Warning {warningModal.currentCount} of {MAX_WARNINGS}
+              </p>
+              <button
+                onClick={() => setWarningModal(null)}
+                className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+              >
+                I Understand, Return to Test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sticky Proctoring Header */}
       <div className="sticky top-0 left-0 w-full bg-white border-b border-slate-200 px-6 py-4 shadow-sm z-50 flex items-center justify-between">
@@ -284,8 +258,8 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
           )}
 
           {timeLeft !== null && (
-            <div className={`flex items-center gap-2 font-mono text-lg font-bold ${timeLeft < 60 ? 'text-red-600 animate-pulse' : 'text-slate-700'}`}>
-              <Clock className="w-5 h-5" />
+            <div className={`flex items-center gap-2 font-mono text-xl font-black ${timeLeft < 60 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
+              <Clock className="w-6 h-6" />
               {formatTime(timeLeft)}
             </div>
           )}
@@ -299,25 +273,10 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
             <h3 className="text-lg font-semibold text-slate-900 mb-6 leading-relaxed">
               <span className="text-blue-600 mr-2">{index + 1}.</span> {q.question_text}
             </h3>
-
             <div className="space-y-3">
               {q.options.map(opt => (
-                <label
-                  key={opt.id}
-                  className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
-                    answers[q.id] === opt.id
-                      ? 'border-blue-600 bg-blue-50/50'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={q.id}
-                    value={opt.id}
-                    checked={answers[q.id] === opt.id}
-                    onChange={() => setAnswers({ ...answers, [q.id]: opt.id })}
-                    className="w-5 h-5 text-blue-600 border-slate-300 focus:ring-blue-600"
-                  />
+                <label key={opt.id} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${ answers[q.id] === opt.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50' }`}>
+                  <input type="radio" name={q.id} value={opt.id} checked={answers[q.id] === opt.id} onChange={() => setAnswers({ ...answers, [q.id]: opt.id })} className="w-5 h-5 text-blue-600 border-slate-300 focus:ring-blue-600" />
                   <span className="text-slate-700 font-medium">{opt.option_text}</span>
                 </label>
               ))}
@@ -329,14 +288,8 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       {/* Submission Footer */}
       <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 z-40">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <p className="text-sm text-slate-500 font-medium">
-            Answered: {Object.keys(answers).length} / {questions.length}
-          </p>
-          <button
-            onClick={() => handleComplete(false)}
-            disabled={isSubmitting}
-            className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50"
-          >
+          <p className="text-sm text-slate-500 font-medium">Answered: {Object.keys(answers).length} / {questions.length}</p>
+          <button onClick={() => handleComplete(false)} disabled={isSubmitting} className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50">
             {isSubmitting ? "Submitting..." : "Submit Test"}
           </button>
         </div>

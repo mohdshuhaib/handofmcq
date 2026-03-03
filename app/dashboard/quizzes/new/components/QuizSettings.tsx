@@ -47,33 +47,48 @@ export default function QuizSettings({ quiz, onChange }: Props) {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Time Limit</label>
               <div className="flex items-center gap-2">
+
+                {/* Minutes Input */}
                 <input
                   type="number"
                   min="0"
                   placeholder="Min"
-                  value={quiz.time_limit_seconds ? Math.floor(quiz.time_limit_seconds / 60) : ""}
+                  value={typeof quiz.time_limit_seconds === 'number' ? Math.floor(quiz.time_limit_seconds / 60).toString() : ""}
                   onChange={e => {
+                    if (e.target.value === "") {
+                      const currentSecs = typeof quiz.time_limit_seconds === 'number' ? quiz.time_limit_seconds % 60 : 0;
+                      updateField("time_limit_seconds", currentSecs === 0 ? null : currentSecs);
+                      return;
+                    }
                     const mins = parseInt(e.target.value) || 0;
-                    const currentSecs = quiz.time_limit_seconds ? quiz.time_limit_seconds % 60 : 0;
+                    const currentSecs = typeof quiz.time_limit_seconds === 'number' ? quiz.time_limit_seconds % 60 : 0;
                     updateField("time_limit_seconds", (mins * 60) + currentSecs);
                   }}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
                 />
                 <span className="text-slate-500 font-medium">m</span>
+
+                {/* Seconds Input */}
                 <input
                   type="number"
                   min="0"
                   max="59"
                   placeholder="Sec"
-                  value={quiz.time_limit_seconds !== null ? quiz.time_limit_seconds % 60 : ""}
+                  value={typeof quiz.time_limit_seconds === 'number' ? (quiz.time_limit_seconds % 60).toString() : ""}
                   onChange={e => {
+                    if (e.target.value === "") {
+                      const currentMins = typeof quiz.time_limit_seconds === 'number' ? Math.floor(quiz.time_limit_seconds / 60) : 0;
+                      updateField("time_limit_seconds", currentMins === 0 ? null : currentMins * 60);
+                      return;
+                    }
                     const secs = parseInt(e.target.value) || 0;
-                    const currentMins = quiz.time_limit_seconds ? Math.floor(quiz.time_limit_seconds / 60) : 0;
+                    const currentMins = typeof quiz.time_limit_seconds === 'number' ? Math.floor(quiz.time_limit_seconds / 60) : 0;
                     updateField("time_limit_seconds", (currentMins * 60) + secs);
                   }}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
                 />
                 <span className="text-slate-500 font-medium">s</span>
+
               </div>
             </div>
 
@@ -88,10 +103,23 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                 <span className="text-sm font-medium text-slate-700">Shuffle Questions for respondents</span>
               </label>
             </div>
+
+            {/* Show Results Toggle */}
+            <div className="flex items-center mt-2 sm:mt-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={quiz.show_results}
+                  onChange={e => updateField("show_results", e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                />
+                <span className="text-sm font-medium text-slate-700">Show score to candidates after submission</span>
+              </label>
+            </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-6">
-             <div className="flex items-center mt-2">
+          <div className="grid sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+            <div className="flex items-center mt-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -103,15 +131,15 @@ export default function QuizSettings({ quiz, onChange }: Props) {
               </label>
             </div>
             {quiz.require_password && (
-               <div>
-                 <input
-                   type="text"
-                   placeholder="Enter quiz password"
-                   value={quiz.quiz_password}
-                   onChange={e => updateField("quiz_password", e.target.value)}
-                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
-                 />
-               </div>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Enter quiz password"
+                  value={quiz.quiz_password}
+                  onChange={e => updateField("quiz_password", e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
+                />
+              </div>
             )}
           </div>
         </div>
@@ -127,7 +155,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 text-center">
               No custom fields added. Candidates will only be asked for their "Full Name" by default.
@@ -135,66 +163,70 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           )}
 
           {quiz.intro_fields?.map((field, index) => (
-            <div key={field.id} className="flex flex-col sm:flex-row gap-3 items-start bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <input
-                type="text"
-                placeholder="Field Label (e.g. Email, Class, Roll No)"
-                value={field.label}
-                onChange={(e) => {
-                  const newFields = [...quiz.intro_fields];
-                  newFields[index].label = e.target.value;
-                  updateField("intro_fields", newFields);
-                }}
-                className="flex-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600"
-              />
+            // FIX 1: Wrapper is now flex-col so the dropdown input naturally falls to the next line
+            <div key={field.id} className="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <select
-                  value={field.type}
+              <div className="flex flex-col sm:flex-row gap-3 items-start w-full">
+                <input
+                  type="text"
+                  placeholder="Field Label (e.g. Email, Class, Roll No)"
+                  value={field.label}
                   onChange={(e) => {
                     const newFields = [...quiz.intro_fields];
-                    newFields[index].type = e.target.value as any;
-
-                    // If they select dropdown, ensure options array exists
-                    if (e.target.value === 'select' && !newFields[index].options) {
-                      newFields[index].options = ["Class A", "Class B"];
-                    }
+                    newFields[index].label = e.target.value;
                     updateField("intro_fields", newFields);
                   }}
-                  className="flex-1 sm:w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none bg-white focus:border-blue-600"
-                >
-                  <option value="text">Short Text</option>
-                  <option value="email">Email</option>
-                  <option value="tel">Phone Number</option>
-                  <option value="select">Dropdown</option>
-                </select>
+                  className="flex-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600"
+                />
 
-                <button
-                  onClick={() => {
-                    updateField("intro_fields", quiz.intro_fields.filter(f => f.id !== field.id));
-                  }}
-                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                  title="Remove Field"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Show Option Editor if Dropdown is selected */}
-              {field.type === 'select' && (
-                <div className="w-full mt-2 pl-2 border-l-2 border-blue-200">
-                  <input
-                    type="text"
-                    placeholder="Comma separated options (e.g. Math, Science, Art)"
-                    value={field.options?.join(", ") || ""}
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                  <select
+                    value={field.type}
                     onChange={(e) => {
                       const newFields = [...quiz.intro_fields];
-                      // Split by comma, trim spaces, remove empty strings
-                      newFields[index].options = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                      newFields[index].type = e.target.value as any;
+
+                      if (e.target.value === 'select' && (!newFields[index].options || newFields[index].options.length === 0)) {
+                        newFields[index].options = ["Class A", "Class B"];
+                      }
                       updateField("intro_fields", newFields);
                     }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs outline-none focus:border-blue-600"
+                    className="flex-1 sm:w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none bg-white focus:border-blue-600"
+                  >
+                    <option value="text">Short Text</option>
+                    <option value="email">Email</option>
+                    <option value="tel">Phone Number</option>
+                    <option value="select">Dropdown</option>
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      updateField("intro_fields", quiz.intro_fields.filter(f => f.id !== field.id));
+                    }}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Remove Field"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* FIX 2: Show Option Editor safely under the row */}
+              {field.type === 'select' && (
+                <div className="w-full pl-1 border-l-4 border-blue-400 mt-1">
+                  <input
+                    type="text"
+                    placeholder="Separate options with commas (e.g. Math, Science, Art)"
+                    // FIX 3: Join and split using just a comma to perfectly preserve typing without eating characters
+                    value={field.options?.join(",") || ""}
+                    onChange={(e) => {
+                      const newFields = [...quiz.intro_fields];
+                      newFields[index].options = e.target.value.split(",");
+                      updateField("intro_fields", newFields);
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600 ml-2"
                   />
+                  <p className="text-xs text-slate-500 mt-1 ml-2">Type your choices separated by a comma.</p>
                 </div>
               )}
             </div>

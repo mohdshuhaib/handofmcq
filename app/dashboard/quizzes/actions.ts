@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
+// --- 1. CREATE NEW QUIZ ---
 export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -12,18 +13,20 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   }
 
   try {
-    // 1. Insert the Quiz
+    // 1. Insert the Quiz (UPDATED with new fields)
     const { data: newQuiz, error: quizError } = await supabase
       .from('quizzes')
       .insert({
         creator_id: user.id,
         title: quizData.title,
         description: quizData.description,
-        time_limit: quizData.time_limit ? parseInt(quizData.time_limit) : null,
+        time_limit_seconds: quizData.time_limit_seconds, // <-- Added this
         require_password: quizData.require_password,
         quiz_password: quizData.quiz_password,
         shuffle_questions: quizData.shuffle_questions,
         is_published: quizData.is_published,
+        intro_fields: quizData.intro_fields || [],
+        show_results: quizData.show_results !== undefined ? quizData.show_results : true,       // <-- Added this
       })
       .select()
       .single();
@@ -31,7 +34,6 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
     if (quizError) throw quizError;
 
     // 2. Insert Questions and their Options
-    // We use a loop here to ensure we get the generated question ID for the options
     for (let i = 0; i < questionsData.length; i++) {
       const q = questionsData[i];
 
@@ -41,14 +43,13 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
           quiz_id: newQuiz.id,
           question_text: q.text,
           points: q.points,
-          sort_order: i, // Maintains the order they built them in
+          sort_order: i,
         })
         .select()
         .single();
 
       if (qError) throw qError;
 
-      // Map the frontend options to match the database schema
       const optionsToInsert = q.options.map((opt: any) => ({
         question_id: newQuestion.id,
         option_text: opt.text,
@@ -71,6 +72,7 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   }
 }
 
+// --- 2. UPDATE EXISTING QUIZ ---
 export async function updateFullQuiz(quizId: string, quizData: any, questionsData: any[]) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -78,24 +80,26 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
   if (!user) return { error: "Unauthorized" };
 
   try {
-    // 1. Update the Quiz Settings
+    // 1. Update the Quiz Settings (UPDATED with new fields)
     const { error: quizError } = await supabase
       .from('quizzes')
       .update({
         title: quizData.title,
         description: quizData.description,
-        time_limit: quizData.time_limit ? parseInt(quizData.time_limit) : null,
+        time_limit_seconds: quizData.time_limit_seconds, // <-- Added this
         require_password: quizData.require_password,
         quiz_password: quizData.quiz_password,
         shuffle_questions: quizData.shuffle_questions,
         is_published: quizData.is_published,
+        intro_fields: quizData.intro_fields || [],       // <-- Added this
+        show_results: quizData.show_results !== undefined ? quizData.show_results : true,
       })
       .eq('id', quizId)
-      .eq('creator_id', user.id); // Security check
+      .eq('creator_id', user.id);
 
     if (quizError) throw quizError;
 
-    // 2. Handle Deletions (Remove questions the user deleted from the UI)
+    // 2. Handle Deletions
     const currentQuestionIds = questionsData.map(q => q.id);
     if (currentQuestionIds.length > 0) {
       await supabase
@@ -109,11 +113,10 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
     for (let i = 0; i < questionsData.length; i++) {
       const q = questionsData[i];
 
-      // Upsert Question
       const { error: qError } = await supabase
         .from('questions')
         .upsert({
-          id: q.id, // Using the existing ID to update, or a new UUID to insert
+          id: q.id,
           quiz_id: quizId,
           question_text: q.text,
           points: q.points,
@@ -122,7 +125,6 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
 
       if (qError) throw qError;
 
-      // Extract current option IDs to delete removed options
       const currentOptionIds = q.options.map((opt: any) => opt.id);
       if (currentOptionIds.length > 0) {
          await supabase
@@ -132,7 +134,6 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
           .not('id', 'in', `(${currentOptionIds.join(',')})`);
       }
 
-      // Upsert Options
       const optionsToUpsert = q.options.map((opt: any) => ({
         id: opt.id,
         question_id: q.id,

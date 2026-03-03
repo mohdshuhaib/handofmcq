@@ -11,10 +11,10 @@ export default async function QuizResultsPage({ params }: { params: { id: string
 
   if (!user) redirect("/login");
 
-  // 1. Fetch Quiz Details (and ensure they own it)
+  // 1. Fetch Quiz Details
   const { data: quiz, error: quizError } = await supabase
     .from("quizzes")
-    .select("id, title, description")
+    .select("*")
     .eq("id", resolvedParams.id)
     .eq("creator_id", user.id)
     .single();
@@ -29,28 +29,47 @@ export default async function QuizResultsPage({ params }: { params: { id: string
     );
   }
 
-  // 2. Fetch all submissions for this quiz
+  // 2. Fetch Submissions
   const { data: submissions } = await supabase
     .from("quiz_submissions")
     .select("*")
+    .eq("quiz_id", quiz.id);
+
+  // 3. Fetch Original Questions
+  const { data: questions } = await supabase
+    .from("questions")
+    .select("id, question_text, points")
     .eq("quiz_id", quiz.id)
-    .order("submitted_at", { ascending: false });
+    .order("sort_order", { ascending: true });
+
+  // 4. Fetch Options to know what was correct
+  const { data: options } = await supabase
+    .from("options")
+    .select("id, question_id, option_text, is_correct")
+    .in("question_id", questions?.map(q => q.id) || []);
+
+  const fullQuestions = questions?.map(q => ({
+    ...q,
+    options: options?.filter(o => o.question_id === q.id) || []
+  })) || [];
 
   return (
     <div className="max-w-6xl mx-auto pb-12">
-      {/* Header Navigation */}
       <div className="flex items-center gap-4 mb-8">
         <Link href="/dashboard/quizzes" className="p-2 rounded-full hover:bg-slate-200 transition-colors text-slate-500">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Results: {quiz.title}</h1>
-          <p className="text-slate-600 text-sm mt-1">Analytics and respondent submissions.</p>
+          <p className="text-slate-600 text-sm mt-1">Analytics, rankings, and deep insights.</p>
         </div>
       </div>
 
-      {/* Render the Client Dashboard */}
-      <ResultsClient quiz={quiz} submissions={submissions || []} />
+      <ResultsClient
+        quiz={quiz}
+        submissions={submissions || []}
+        questions={fullQuestions}
+      />
     </div>
   );
 }

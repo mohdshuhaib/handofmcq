@@ -1,64 +1,113 @@
 import Link from 'next/link';
+import { ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
 import { login } from '../auth/actions';
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { message: string }
+  // In modern Next.js, searchParams is a Promise
+  searchParams: Promise<{ message?: string }>
 }) {
+  // Await the params to fix the Next.js Sync Dynamic APIs error
+  const resolvedParams = await searchParams;
+  const message = resolvedParams?.message;
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-        <div className="mb-8 text-center">
-          <h2 className="text-3xl font-bold text-slate-900">Welcome back</h2>
-          <p className="mt-2 text-sm text-slate-600">Log in to your Hand of MCQ account</p>
-        </div>
+    <main className="relative flex min-h-screen items-center justify-center bg-slate-50 p-6 selection:bg-blue-200 selection:text-blue-900">
 
-        {/* Error Message Display */}
-        {searchParams?.message && (
-          <div className="mb-6 rounded-md bg-red-50 p-4 text-sm text-red-600 border border-red-200">
-            {searchParams.message}
+      {/* Background Decoration (Subtle Grid) */}
+      <div className="absolute inset-0 z-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+
+      <div className="relative z-10 w-full max-w-md">
+
+        {/* Back to Home Button */}
+        <Link
+          href="/"
+          className="group mb-8 inline-flex items-center gap-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200 transition-transform group-hover:-translate-x-1">
+            <ArrowLeft className="h-4 w-4" />
           </div>
-        )}
+          Back to Homepage
+        </Link>
 
-        {/* Note the action={login} attribute here */}
-        <form className="space-y-6" action={login}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email address</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2.5 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 sm:text-sm"
-              placeholder="you@example.com"
-            />
+        {/* Login Card */}
+        <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+          <div className="p-8 sm:p-10">
+
+            {/* Header */}
+            <div className="mb-8 flex flex-col items-center text-center">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/30">
+                <Sparkles className="h-7 w-7 text-white" />
+              </div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-sm font-medium text-slate-500">
+                Log in to your Hand of MCQ workspace
+              </p>
+            </div>
+
+            {/* Error Message Display */}
+            {message && (
+              <div className="mb-6 flex items-start gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-600 ring-1 ring-inset ring-red-100 animate-in fade-in slide-in-from-top-2">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                <p className="font-semibold">{message}</p>
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form className="space-y-5" action={login}>
+              <div>
+                <label htmlFor="email" className="block text-sm font-bold text-slate-700">
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  className="mt-2 block w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 outline-none"
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-bold text-slate-700">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className="mt-2 block w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 active:scale-[0.98] shadow-md shadow-blue-500/20"
+                >
+                  Log in securely
+                </button>
+              </div>
+            </form>
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2.5 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 sm:text-sm"
-            />
+          {/* Footer Area */}
+          <div className="bg-slate-50 px-8 py-6 text-center ring-1 ring-inset ring-slate-100 sm:px-10">
+            <p className="text-sm font-medium text-slate-600">
+              Don't have an account?{' '}
+              <Link href="/signup" className="font-bold text-blue-600 transition-colors hover:text-blue-700 hover:underline underline-offset-4">
+                Sign up for free
+              </Link>
+            </p>
           </div>
-
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 active:scale-[0.98]"
-          >
-            Log in
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-sm">
-          <span className="text-slate-600">Don't have an account? </span>
-          <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-500 transition-colors">
-            Sign up
-          </Link>
         </div>
       </div>
     </main>

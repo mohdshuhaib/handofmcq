@@ -20,7 +20,7 @@ export default function CreateQuizPage() {
 
   const [quiz, setQuiz] = useState<QuizState>({
   title: "", description: "", time_limit_seconds: null, require_password: false, // <-- NEW
-  quiz_password: "", shuffle_questions: false, is_published: false, intro_fields: []
+  quiz_password: "", shuffle_questions: false, show_results: true, is_published: false, intro_fields: []
 });
 
   const [questions, setQuestions] = useState<Question[]>([{

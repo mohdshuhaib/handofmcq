@@ -6,9 +6,10 @@ export async function getPublicQuiz(quizId: string) {
   const supabase = await createClient();
 
   // 1. Fetch the quiz details
+  // UPDATED: Now asking for time_limit_seconds and intro_fields
   const { data: quiz, error: quizError } = await supabase
     .from('quizzes')
-    .select('id, title, description, time_limit, require_password, quiz_password, shuffle_questions, is_published')
+    .select('id, title, description, time_limit_seconds, require_password, quiz_password, shuffle_questions, is_published, intro_fields, show_results')
     .eq('id', quizId)
     .single();
 
@@ -42,8 +43,7 @@ export async function getPublicQuiz(quizId: string) {
     formattedQuestions.sort(() => Math.random() - 0.5);
   }
 
-  // Remove the actual password from the payload so it isn't exposed in the network tab,
-  // just send a boolean saying it requires one.
+  // Remove the actual password from the payload so it isn't exposed in the network tab
   const secureQuizConfig = {
     ...quiz,
     quiz_password: quiz.require_password ? "PROTECTED" : null,
@@ -57,7 +57,8 @@ export async function submitQuizAndGrade(
   respondentName: string,
   userAnswers: Record<string, string>,
   warnings: number,
-  respondentDetails: Record<string, string> // <-- NEW: Catch the dynamic intro answers
+  respondentDetails: Record<string, string>, // <-- NEW: Catch the dynamic intro answers
+  timeTakenSeconds: number
 ) {
   const supabase = await createClient();
 
@@ -98,7 +99,8 @@ export async function submitQuizAndGrade(
       total_points: totalPoints,
       answers: userAnswers,
       cheat_warnings: warnings,
-      respondent_details: respondentDetails // <-- NEW: Saves the raw dynamic JSON data
+      respondent_details: respondentDetails, // <-- NEW: Saves the raw dynamic JSON data
+      time_taken_seconds: timeTakenSeconds
     });
 
   if (error) {

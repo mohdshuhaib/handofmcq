@@ -32,15 +32,17 @@ export default async function EditQuizPage({ params }: { params: { id: string } 
     .select("*")
     .in("question_id", questions?.map(q => q.id) || []);
 
-  // 4. Format the data to match our Frontend Types perfectly
+  // 4. Format the data to match our Frontend Types perfectly (UPDATED FOR NEW FIELDS)
   const formattedQuizState = {
     title: quiz.title,
     description: quiz.description || "",
-    time_limit: quiz.time_limit ? quiz.time_limit.toString() : "",
+    time_limit_seconds: quiz.time_limit_seconds || null, // <-- Fixes the Timer
     require_password: quiz.require_password,
     quiz_password: quiz.quiz_password || "",
     shuffle_questions: quiz.shuffle_questions,
     is_published: quiz.is_published,
+    intro_fields: quiz.intro_fields || [],               // <-- Fixes the Intro Form
+    show_results: quiz.show_results !== undefined ? quiz.show_results : true, // <-- Fixes the Show Results toggle
   };
 
   const formattedQuestions = questions?.map(q => ({

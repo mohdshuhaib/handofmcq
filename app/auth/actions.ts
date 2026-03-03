@@ -43,3 +43,13 @@ export async function signup(formData: FormData) {
   revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
+
+export async function signout() {
+  const supabase = await createClient();
+
+  // Clear the session from Supabase
+  await supabase.auth.signOut();
+
+  // Forcefully redirect the user to the homepage
+  redirect('/');
+}

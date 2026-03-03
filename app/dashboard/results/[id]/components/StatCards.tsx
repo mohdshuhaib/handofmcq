@@ -1,9 +1,7 @@
-import { Users, Target, Trophy, AlertTriangle } from "lucide-react";
+import { Users, Target, Trophy, Clock } from "lucide-react";
 
 export default function StatCards({ submissions }: { submissions: any[] }) {
   const totalSubmissions = submissions.length;
-
-  // Calculate analytics safely
   const validScores = submissions.filter(s => s.total_points > 0);
 
   const averagePercentage = validScores.length > 0
@@ -14,13 +12,22 @@ export default function StatCards({ submissions }: { submissions: any[] }) {
     ? Math.round(Math.max(...validScores.map(s => (s.score / s.total_points) * 100)))
     : 0;
 
-  const totalWarnings = submissions.reduce((acc, curr) => acc + (curr.cheat_warnings || 0), 0);
+  const validTimes = submissions.filter(s => s.time_taken_seconds > 0);
+  const avgTimeSeconds = validTimes.length > 0
+    ? Math.round(validTimes.reduce((acc, curr) => acc + curr.time_taken_seconds, 0) / validTimes.length)
+    : 0;
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}m ${s}s`;
+  };
 
   const stats = [
     { label: "Total Respondents", value: totalSubmissions, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Average Score", value: `${averagePercentage}%`, icon: Target, color: "text-indigo-600", bg: "bg-indigo-50" },
     { label: "Highest Score", value: `${highestScore}%`, icon: Trophy, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Total Warnings", value: totalWarnings, icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-50" },
+    { label: "Avg Time Taken", value: formatTime(avgTimeSeconds), icon: Clock, color: "text-orange-600", bg: "bg-orange-50" },
   ];
 
   return (
