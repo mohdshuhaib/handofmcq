@@ -4,8 +4,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ResultsClient from "./components/ResultsClient";
 
-export default async function QuizResultsPage({ params }: { params: { id: string } }) {
+export default async function QuizResultsPage({ params }: { params: Promise<{ id: string | string[] }> }) {
   const resolvedParams = await params;
+
+  // Ensure the id is a flat string to pass to Supabase
+  const quizId = Array.isArray(resolvedParams.id) ? resolvedParams.id[0] : resolvedParams.id;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -15,7 +19,7 @@ export default async function QuizResultsPage({ params }: { params: { id: string
   const { data: quiz, error: quizError } = await supabase
     .from("quizzes")
     .select("*")
-    .eq("id", resolvedParams.id)
+    .eq("id", quizId)
     .eq("creator_id", user.id)
     .single();
 
