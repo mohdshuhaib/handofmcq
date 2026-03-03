@@ -4,11 +4,15 @@ import QuizEngine from "./components/QuizEngine";
 export default async function TakeQuizPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string | string[] }>;
 }) {
   // Await the params object properly for modern Next.js
   const resolvedParams = await params;
-  const { quiz, questions, error } = await getPublicQuiz(resolvedParams.id);
+
+  // Ensure the id is a flat string
+  const quizId = Array.isArray(resolvedParams.id) ? resolvedParams.id[0] : resolvedParams.id;
+
+  const { quiz, questions, error } = await getPublicQuiz(quizId);
 
   if (error || !quiz || !questions) {
     return (
