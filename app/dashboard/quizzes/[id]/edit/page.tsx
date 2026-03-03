@@ -2,8 +2,17 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import EditQuizClient from "./EditQuizClient";
 
-export default async function EditQuizPage({ params }: { params: { id: string } }) {
+// Updated type signature for params to fix the Next.js 15 build error
+export default async function EditQuizPage({
+  params
+}: {
+  params: Promise<{ id: string | string[] }>
+}) {
   const resolvedParams = await params;
+
+  // Ensure the id is a flat string to pass to Supabase
+  const quizId = Array.isArray(resolvedParams.id) ? resolvedParams.id[0] : resolvedParams.id;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -13,7 +22,7 @@ export default async function EditQuizPage({ params }: { params: { id: string } 
   const { data: quiz, error: quizError } = await supabase
     .from("quizzes")
     .select("*")
-    .eq("id", resolvedParams.id)
+    .eq("id", quizId)
     .eq("creator_id", user.id)
     .single();
 
@@ -32,17 +41,17 @@ export default async function EditQuizPage({ params }: { params: { id: string } 
     .select("*")
     .in("question_id", questions?.map(q => q.id) || []);
 
-  // 4. Format the data to match our Frontend Types perfectly (UPDATED FOR NEW FIELDS)
+  // 4. Format the data to match our Frontend Types perfectly
   const formattedQuizState = {
     title: quiz.title,
     description: quiz.description || "",
-    time_limit_seconds: quiz.time_limit_seconds || null, // <-- Fixes the Timer
+    time_limit_seconds: quiz.time_limit_seconds || null,
     require_password: quiz.require_password,
     quiz_password: quiz.quiz_password || "",
     shuffle_questions: quiz.shuffle_questions,
     is_published: quiz.is_published,
-    intro_fields: quiz.intro_fields || [],               // <-- Fixes the Intro Form
-    show_results: quiz.show_results !== undefined ? quiz.show_results : true, // <-- Fixes the Show Results toggle
+    intro_fields: quiz.intro_fields || [],
+    show_results: quiz.show_results !== undefined ? quiz.show_results : true,
   };
 
   const formattedQuestions = questions?.map(q => ({
