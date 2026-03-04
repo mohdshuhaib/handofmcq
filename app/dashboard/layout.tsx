@@ -25,13 +25,14 @@ export default async function DashboardLayout({
   const displayName = profile?.full_name || "User";
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* Sidebar Component */}
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden text-slate-900">
+      {/* Sidebar Component handles both Desktop Sidebar & Mobile Navbars */}
       <Sidebar userEmail={user.email || ""} userName={displayName} />
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto md:ml-64 pb-20 md:pb-0">
-        <div className="p-6 max-w-6xl mx-auto">
+      {/* Added pt-20 for mobile top header and pb-24 for mobile bottom nav */}
+      <main className="flex-1 overflow-y-auto md:ml-64 pt-20 pb-24 md:pt-0 md:pb-0">
+        <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto w-full">
           {children}
         </div>
       </main>

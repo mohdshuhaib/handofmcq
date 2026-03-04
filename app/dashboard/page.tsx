@@ -8,7 +8,8 @@ import {
   Activity,
   ArrowRight,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  MoreVertical
 } from 'lucide-react';
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
     .select("id, title, is_published, created_at")
     .order("created_at", { ascending: false });
 
-  // 4. Fetch all Submissions (RLS automatically filters this to only show submissions for THIS user's quizzes)
+  // 4. Fetch all Submissions (RLS automatically filters this)
   const { data: submissions } = await supabase
     .from("quiz_submissions")
     .select("id, submitted_at");
@@ -44,46 +45,50 @@ export default async function DashboardPage() {
   const totalQuizzes = quizzes?.length || 0;
   const activeQuizzes = quizzes?.filter(q => q.is_published).length || 0;
   const totalRespondents = submissions?.length || 0;
-  const recentQuizzes = quizzes?.slice(0, 3) || []; // Get the 3 newest quizzes
+  const recentQuizzes = quizzes?.slice(0, 4) || []; // Display up to 4 recent quizzes
 
   return (
-    <main className="pb-12">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Header Greeting */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-slate-900">Welcome back, {firstName} 👋</h2>
-        <p className="mt-2 text-slate-600">Here is what is happening with your tests today.</p>
+      <div className="mb-8 md:mb-10">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+          Welcome back, {firstName} 👋
+        </h2>
+        <p className="mt-2 text-slate-500 font-medium">
+          Here is what is happening with your tests today.
+        </p>
       </div>
 
       {/* --- STATS OVERVIEW --- */}
-      <div className="grid gap-6 sm:grid-cols-3 mb-10">
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 shrink-0">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-3 mb-10">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm shadow-slate-200/50 flex items-center gap-5 hover:shadow-md transition-shadow">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-blue-50 text-blue-600 shrink-0">
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Total Quizzes</p>
-            <p className="text-2xl font-bold text-slate-900">{totalQuizzes}</p>
+            <p className="text-sm font-semibold text-slate-500 mb-1">Total Quizzes</p>
+            <p className="text-3xl font-black text-slate-900 leading-none">{totalQuizzes}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-green-50 text-green-600 shrink-0">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm shadow-slate-200/50 flex items-center gap-5 hover:shadow-md transition-shadow">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-green-50 text-green-600 shrink-0">
             <Activity className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Active (Published)</p>
-            <p className="text-2xl font-bold text-slate-900">{activeQuizzes}</p>
+            <p className="text-sm font-semibold text-slate-500 mb-1">Active / Published</p>
+            <p className="text-3xl font-black text-slate-900 leading-none">{activeQuizzes}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-purple-50 text-purple-600 shrink-0">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm shadow-slate-200/50 flex items-center gap-5 hover:shadow-md transition-shadow">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-purple-50 text-purple-600 shrink-0">
             <Users className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Total Respondents</p>
-            <p className="text-2xl font-bold text-slate-900">{totalRespondents}</p>
+            <p className="text-sm font-semibold text-slate-500 mb-1">Total Respondents</p>
+            <p className="text-3xl font-black text-slate-900 leading-none">{totalRespondents}</p>
           </div>
         </div>
       </div>
@@ -92,85 +97,103 @@ export default async function DashboardPage() {
       <div className="grid lg:grid-cols-3 gap-8">
 
         {/* Left Column: Recent Quizzes */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-slate-900">Recent Quizzes</h3>
-            <Link href="/dashboard/quizzes" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+            <Link href="/dashboard/quizzes" className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg">
               View all <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm shadow-slate-200/50 overflow-hidden">
             {recentQuizzes.length > 0 ? (
               <div className="divide-y divide-slate-100">
                 {recentQuizzes.map(quiz => {
                   const date = new Date(quiz.created_at);
                   return (
-                    <div key={quiz.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                      <div>
-                        <Link href={`/dashboard/quizzes/${quiz.id}/edit`} className="font-bold text-slate-900 hover:text-blue-600 transition-colors line-clamp-1">
+                    <div key={quiz.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors group">
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/dashboard/quizzes/${quiz.id}/edit`} className="font-bold text-slate-900 hover:text-blue-600 transition-colors block truncate text-lg">
                           {quiz.title}
                         </Link>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {date.toLocaleDateString()}
+                        <div className="flex items-center gap-4 mt-2 text-sm font-medium text-slate-500">
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-slate-400" />
+                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </span>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                        quiz.is_published
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200"
-                      }`}>
-                        {quiz.is_published ? "Active" : "Draft"}
-                      </span>
+
+                      <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
+                        <span className={`px-3 py-1 text-xs font-bold rounded-full border flex items-center gap-1.5 ${
+                          quiz.is_published
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-slate-100 text-slate-600 border-slate-200"
+                        }`}>
+                          {quiz.is_published && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                          {quiz.is_published ? "Active" : "Draft"}
+                        </span>
+
+                        <Link href={`/dashboard/quizzes/${quiz.id}/edit`} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-blue-600 hover:shadow-sm transition-all sm:opacity-0 sm:group-hover:opacity-100">
+                          <MoreVertical className="w-5 h-5" />
+                        </Link>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="p-8 text-center">
-                <p className="text-slate-500">You haven't created any quizzes yet.</p>
+              <div className="p-12 text-center flex flex-col items-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-8 h-8 text-slate-300" />
+                </div>
+                <h4 className="text-lg font-bold text-slate-900 mb-1">No quizzes yet</h4>
+                <p className="text-slate-500 mb-6 max-w-sm">You haven't created any quizzes. Start by creating your first test to gather responses.</p>
+                <Link href="/dashboard/quizzes/new" className="bg-blue-600 text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">
+                  Create First Quiz
+                </Link>
               </div>
             )}
           </div>
         </div>
 
         {/* Right Column: Quick Actions */}
-        <div className="space-y-6">
+        <div className="space-y-5 mt-6 lg:mt-0">
           <h3 className="text-xl font-bold text-slate-900">Quick Actions</h3>
 
           <div className="grid gap-4">
             <Link
               href="/dashboard/quizzes/new"
-              className="group bg-slate-900 rounded-2xl p-5 flex flex-col items-start gap-4 hover:bg-slate-800 transition-all shadow-sm"
+              className="group relative overflow-hidden bg-slate-900 rounded-2xl p-6 flex flex-col items-start gap-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border border-slate-800"
             >
-              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
-                <Plus className="w-5 h-5" />
+              {/* Decorative gradient blob */}
+              <div className="absolute -top-12 -right-12 w-32 h-32 bg-gradient-to-br from-blue-500/30 to-purple-500/30 blur-2xl rounded-full group-hover:scale-150 transition-transform duration-500" />
+
+              <div className="relative w-12 h-12 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white backdrop-blur-sm">
+                <Plus className="w-6 h-6" />
               </div>
-              <div>
-                <h4 className="text-white font-bold">Create New Quiz</h4>
-                <p className="text-slate-400 text-sm mt-1">Start from scratch or upload an Excel file.</p>
+              <div className="relative">
+                <h4 className="text-white font-bold text-lg group-hover:text-blue-300 transition-colors">Create New Quiz</h4>
+                <p className="text-slate-400 text-sm mt-1.5 leading-relaxed">Start from scratch, use AI, or upload an Excel file directly.</p>
               </div>
             </Link>
 
             <Link
               href="/dashboard/results"
-              className="group bg-white border border-slate-200 rounded-2xl p-5 flex flex-col items-start gap-4 hover:border-blue-300 hover:shadow-md transition-all"
+              className="group bg-white border border-slate-300 rounded-2xl p-6 flex flex-col items-start gap-5 hover:border-blue-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="text-slate-900 font-bold group-hover:text-blue-600 transition-colors">Analyze Results</h4>
-                <p className="text-slate-500 text-sm mt-1">Check grades, cheating warnings, and export data.</p>
+                <h4 className="text-slate-900 font-bold text-lg group-hover:text-blue-600 transition-colors">Analyze Results</h4>
+                <p className="text-slate-500 text-sm mt-1.5 leading-relaxed">Check grades, review cheating warnings, and export data easily.</p>
               </div>
             </Link>
           </div>
         </div>
 
       </div>
-    </main>
+    </div>
   );
 }
