@@ -1,15 +1,40 @@
+"use client";
+
+import { use } from "react";
 import Link from 'next/link';
-import { ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
+import { useFormStatus } from 'react-dom';
 import { login } from '../auth/actions';
 
-export default async function LoginPage({
+// --- NEW: Submit Button Component to handle loading state ---
+function SubmitButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 active:scale-[0.98] shadow-md shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+    >
+      {pending ? (
+        <>
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Logging in...
+        </>
+      ) : (
+        "Log In"
+      )}
+    </button>
+  );
+}
+
+export default function LoginPage({
   searchParams,
 }: {
-  // In modern Next.js, searchParams is a Promise
   searchParams: Promise<{ message?: string }>
 }) {
-  // Await the params to fix the Next.js Sync Dynamic APIs error
-  const resolvedParams = await searchParams;
+  // Unwrapping the promise properly for Next.js 15 Client Components
+  const resolvedParams = use(searchParams);
   const message = resolvedParams?.message;
 
   return (
@@ -89,12 +114,7 @@ export default async function LoginPage({
               </div>
 
               <div className="pt-2">
-                <button
-                  type="submit"
-                  className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 active:scale-[0.98] shadow-md shadow-blue-500/20"
-                >
-                  Log in securely
-                </button>
+                <SubmitButton />
               </div>
             </form>
           </div>
