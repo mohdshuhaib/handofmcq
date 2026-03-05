@@ -1,4 +1,4 @@
-import { Settings2, Trash2, UserPlus, CalendarDays } from "lucide-react";
+import { Settings2, Trash2, UserPlus, CalendarDays, X } from "lucide-react";
 import { QuizState, IntroField } from "../types";
 
 interface Props {
@@ -9,6 +9,16 @@ interface Props {
 export default function QuizSettings({ quiz, onChange }: Props) {
   const updateField = (field: keyof QuizState, value: any) => {
     onChange({ ...quiz, [field]: value });
+  };
+
+  // Helper to safely format ISO database strings into the exact YYYY-MM-DDThh:mm format required by HTML inputs
+  const formatForInput = (dateStr: string | null) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "";
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   return (
@@ -42,36 +52,60 @@ export default function QuizSettings({ quiz, onChange }: Props) {
             />
           </div>
 
-          {/* --- NEW: SCHEDULING SECTION --- */}
+          {/* --- SCHEDULING SECTION WITH CLEAR BUTTONS --- */}
           <div className="grid sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
                 <CalendarDays className="w-4 h-4 text-slate-400" /> Start Time (Optional)
               </label>
-              <input
-                type="datetime-local"
-                value={quiz.start_time || ""}
-                onChange={e => updateField("start_time", e.target.value || null)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="datetime-local"
+                  value={formatForInput(quiz.start_time)}
+                  onChange={e => updateField("start_time", e.target.value || null)}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
+                />
+                {quiz.start_time && (
+                  <button
+                    type="button"
+                    onClick={() => updateField("start_time", null)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Clear Start Time"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
                 <CalendarDays className="w-4 h-4 text-slate-400" /> End Time (Optional)
               </label>
-              <input
-                type="datetime-local"
-                value={quiz.end_time || ""}
-                onChange={e => updateField("end_time", e.target.value || null)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="datetime-local"
+                  value={formatForInput(quiz.end_time)}
+                  onChange={e => updateField("end_time", e.target.value || null)}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
+                />
+                {quiz.end_time && (
+                  <button
+                    type="button"
+                    onClick={() => updateField("end_time", null)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Clear End Time"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
             {/* Precise Timer Inputs */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Time Limit (Optional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Time Limit</label>
               <div className="flex items-center gap-2">
 
                 {/* Minutes Input */}
@@ -221,6 +255,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                   </select>
 
                   <button
+                    type="button"
                     onClick={() => {
                       updateField("intro_fields", quiz.intro_fields.filter(f => f.id !== field.id));
                     }}
@@ -252,6 +287,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           ))}
 
           <button
+            type="button"
             onClick={() => {
               const newField: IntroField = { id: crypto.randomUUID(), label: "", type: "text", required: true };
               updateField("intro_fields", [...(quiz.intro_fields || []), newField]);
