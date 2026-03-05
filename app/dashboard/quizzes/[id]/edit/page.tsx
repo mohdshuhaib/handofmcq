@@ -52,6 +52,8 @@ export default async function EditQuizPage({
     is_published: quiz.is_published,
     intro_fields: quiz.intro_fields || [],
     show_results: quiz.show_results !== undefined ? quiz.show_results : true,
+    start_time: quiz.start_time || null,
+    end_time: quiz.end_time || null,
   };
 
   const formattedQuestions = questions?.map(q => ({
