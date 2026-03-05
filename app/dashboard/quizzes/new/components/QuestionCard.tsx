@@ -56,7 +56,7 @@ export default function QuestionCard({ question, index, canDelete, onChange, onD
         )}
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 font-anek">
         <input
           type="text"
           placeholder="Type your question here..."

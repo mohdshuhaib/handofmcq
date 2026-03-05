@@ -20,7 +20,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           <h2 className="text-lg font-bold text-slate-900">General Settings</h2>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5 font-anek">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Quiz Title *</label>
             <input
@@ -155,7 +155,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 font-anek">
           {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 text-center">
               No custom fields added. Candidates will only be asked for their "Full Name" by default.

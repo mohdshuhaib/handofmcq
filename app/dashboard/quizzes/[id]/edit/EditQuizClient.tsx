@@ -81,7 +81,7 @@ export default function EditQuizClient({ quizId, initialQuizState, initialQuesti
       {/* Modular Components - Loaded with existing data */}
       <QuizSettings quiz={quiz} onChange={setQuiz} />
 
-      <div className="space-y-6">
+      <div className="space-y-6 font-anek">
         {questions.map((q, index) => (
           <QuestionCard
             key={q.id}

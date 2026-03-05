@@ -130,7 +130,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   // 1. GATEWAY VIEW
   if (phase === 'gate') {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex min-h-screen font-anek items-center justify-center p-6">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
           <h1 className="text-2xl font-bold text-slate-900 mb-2">{quiz.title}</h1>
           <p className="text-slate-600 mb-6 text-sm">{quiz.description}</p>
@@ -170,7 +170,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   // 2. INTRO VIEW
   if (phase === 'intro') {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex min-h-screen font-anek items-center justify-center p-6">
         <div className="w-full max-w-2xl bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
             <ShieldAlert className="w-8 h-8 text-blue-600" />
@@ -246,7 +246,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       )}
 
       {/* Sticky Proctoring Header */}
-      <div className="sticky top-0 left-0 w-full bg-white border-b border-slate-200 px-6 py-4 shadow-sm z-50 flex items-center justify-between">
+      <div className="sticky font-anek top-0 left-0 w-full bg-white border-b border-slate-200 px-6 py-4 shadow-sm z-50 flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-900 truncate hidden sm:block">{quiz.title}</h2>
 
         <div className="flex items-center gap-6">
@@ -267,7 +267,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       </div>
 
       {/* Questions List */}
-      <div className="max-w-3xl mx-auto p-6 space-y-8 mt-6">
+      <div className="max-w-3xl font-anek mx-auto p-6 space-y-8 mt-6">
         {questions.map((q, index) => (
           <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900 mb-6 leading-relaxed">
