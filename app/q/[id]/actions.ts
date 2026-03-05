@@ -16,19 +16,29 @@ export async function getPublicQuiz(quizId: string) {
     return { error: "Quiz not found or not currently active." };
   }
 
-  // --- NEW: SERVER SIDE TIME VALIDATION ---
+  // --- FIX: SERVER SIDE TIME VALIDATION (Using exact Date math) ---
   const now = new Date();
 
   // Check if it hasn't started yet
   if (quiz.start_time && now < new Date(quiz.start_time)) {
-    const startDate = new Date(quiz.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-    return { error: `This quiz hasn't started yet. It will be available beginning on ${startDate}.` };
+    // Format explicitly in Indian Standard Time (IST)
+    const startDate = new Date(quiz.start_time).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+    return { error: `This quiz hasn't started yet. It will be available beginning on ${startDate} (IST).` };
   }
 
   // Check if it has already ended
   if (quiz.end_time && now > new Date(quiz.end_time)) {
-    const endDate = new Date(quiz.end_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-    return { error: `This quiz has already ended. It closed on ${endDate} and is no longer accepting responses.` };
+    // Format explicitly in Indian Standard Time (IST)
+    const endDate = new Date(quiz.end_time).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+    return { error: `This quiz has already ended. It closed on ${endDate} (IST) and is no longer accepting responses.` };
   }
 
   // 2. Fetch Questions
@@ -71,7 +81,7 @@ export async function submitQuizAndGrade(
   respondentName: string,
   userAnswers: Record<string, string>,
   warnings: number,
-  respondentDetails: Record<string, string>, // <-- NEW: Catch the dynamic intro answers
+  respondentDetails: Record<string, string>,
   timeTakenSeconds: number
 ) {
   const supabase = await createClient();
@@ -113,7 +123,7 @@ export async function submitQuizAndGrade(
       total_points: totalPoints,
       answers: userAnswers,
       cheat_warnings: warnings,
-      respondent_details: respondentDetails, // <-- NEW: Saves the raw dynamic JSON data
+      respondent_details: respondentDetails,
       time_taken_seconds: timeTakenSeconds
     });
 

@@ -11,14 +11,16 @@ export default function QuizSettings({ quiz, onChange }: Props) {
     onChange({ ...quiz, [field]: value });
   };
 
-  // Helper to safely format ISO database strings into the exact YYYY-MM-DDThh:mm format required by HTML inputs
-  const formatForInput = (dateStr: string | null) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
+  // FIX: Safely translate the absolute ISO database string back into local browser time for the input
+  const formatForInput = (isoString: string | null) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
     if (isNaN(date.getTime())) return "";
 
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    // Shift the time by the user's local timezone offset so we get the exact local numbers
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().slice(0, 16); // Outputs exact YYYY-MM-DDThh:mm
   };
 
   return (
@@ -62,7 +64,15 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                 <input
                   type="datetime-local"
                   value={formatForInput(quiz.start_time)}
-                  onChange={e => updateField("start_time", e.target.value || null)}
+                  onChange={e => {
+                    if (!e.target.value) {
+                      updateField("start_time", null);
+                    } else {
+                      // Browser automatically parses this as Local Time
+                      const localDate = new Date(e.target.value);
+                      updateField("start_time", localDate.toISOString());
+                    }
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
                 />
                 {quiz.start_time && (
@@ -85,7 +95,14 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                 <input
                   type="datetime-local"
                   value={formatForInput(quiz.end_time)}
-                  onChange={e => updateField("end_time", e.target.value || null)}
+                  onChange={e => {
+                    if (!e.target.value) {
+                      updateField("end_time", null);
+                    } else {
+                      const localDate = new Date(e.target.value);
+                      updateField("end_time", localDate.toISOString());
+                    }
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
                 />
                 {quiz.end_time && (
