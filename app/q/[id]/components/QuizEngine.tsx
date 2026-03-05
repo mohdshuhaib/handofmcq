@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Lock, Clock, AlertTriangle, CheckCircle2, ShieldAlert,
-  XCircle, ArrowLeft, ArrowRight, LayoutGrid, Check, Sparkles, X, ChevronRight, Loader2
+  XCircle, ArrowLeft, ArrowRight, LayoutGrid, Check, Sparkles, X, ChevronRight, Loader2, Award
 } from "lucide-react";
 import { submitQuizAndGrade, verifyQuizPassword } from "../actions";
 import Link from "next/link";
@@ -77,7 +77,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     setIsSubmitting(false);
   }, [answers, introDetails, isSubmitting, quiz.id, warnings, getDisplayName, startTime]);
 
-  // FIX: Separate effect to watch the timer and trigger completion without fighting the render cycle
+  // Separate effect to watch the timer
   useEffect(() => {
     if (phase !== 'active') return;
 
@@ -93,20 +93,19 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     };
   }, [phase, timeLeft, handleComplete]);
 
-  // FIX: Dedicated effect to watch warnings and trigger completion safely AFTER render
+  // Dedicated effect to watch warnings and trigger completion
   useEffect(() => {
     if (warnings >= MAX_WARNINGS && phase === 'active') {
       handleComplete(true);
     }
   }, [warnings, phase, handleComplete]);
 
-  // FIX: Dedicated effect for visibility and context menu tracking
+  // Security Effect: Visibility, Context Menu, Shortcuts, and Screenshot Interception
   useEffect(() => {
     if (phase !== 'active') return;
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // Only update the state here. Do NOT call handleComplete inside the setState callback.
         setWarnings(prev => {
           const newCount = prev + 1;
           if (newCount < MAX_WARNINGS) {
@@ -117,16 +116,36 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
     const disableContext = (e: Event) => e.preventDefault();
+
+    const blockShortcuts = (e: KeyboardEvent) => {
+      // Prevent PrintScreen, Ctrl+P, Ctrl+S, Cmd+Shift+S, Cmd+Shift+3/4/5
+      if (
+        e.key === 'PrintScreen' ||
+        (e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'c' || e.key === 'v' || e.key === 'x')) ||
+        (e.metaKey && (e.key === 'p' || e.key === 's' || e.key === 'c' || e.key === 'v' || e.key === 'x')) ||
+        (e.ctrlKey && e.shiftKey && e.key === 's') ||
+        (e.metaKey && e.shiftKey && ['s', 'S', '3', '4', '5'].includes(e.key))
+      ) {
+        e.preventDefault();
+        try { navigator.clipboard.writeText(''); } catch(err) {} // Try to clear clipboard
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("contextmenu", disableContext);
     document.addEventListener("copy", disableContext);
+    document.addEventListener("cut", disableContext);
+    document.addEventListener("paste", disableContext);
+    document.addEventListener("keydown", blockShortcuts);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("contextmenu", disableContext);
       document.removeEventListener("copy", disableContext);
+      document.removeEventListener("cut", disableContext);
+      document.removeEventListener("paste", disableContext);
+      document.removeEventListener("keydown", blockShortcuts);
     };
   }, [phase]);
 
@@ -329,7 +348,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
                   <div className="w-10 h-10 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center shrink-0"><AlertTriangle className="w-5 h-5" /></div>
                   <div>
                     <h4 className="font-bold text-slate-900">Anti-Cheat Enabled</h4>
-                    <p className="text-sm text-slate-600 font-medium mt-0.5">Switching tabs or apps will trigger a warning. Max {MAX_WARNINGS} warnings allowed.</p>
+                    <p className="text-sm text-slate-600 font-medium mt-0.5">Switching tabs, using shortcuts, or screenshots will trigger a warning. Max {MAX_WARNINGS} warnings allowed.</p>
                   </div>
                 </div>
               </div>
@@ -394,6 +413,12 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   // ==========================================
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 flex flex-col relative select-none font-sans overflow-hidden">
+
+      {/* CSS Anti-Print and Anti-Selection Rules */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print { body { display: none !important; } }
+        * { user-select: none !important; -webkit-user-select: none !important; }
+      `}} />
 
       {/* BACKGROUND DECORATION */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
@@ -501,13 +526,19 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       </div>
 
       {/* --- PART 3: MAIN QUESTION CARD --- */}
-      {/* Added extra padding bottom to account for the floating navigation pill */}
       <div className="relative z-10 flex-1 px-4 sm:px-6 pb-[120px] sm:pb-[140px] overflow-y-auto">
         <div className="bg-white rounded-[2rem] p-6 sm:p-8 md:p-10 shadow-2xl max-w-3xl mx-auto min-h-[50vh] flex flex-col animate-in slide-in-from-right-4 fade-in duration-300" key={currentQ.id}>
 
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-8 leading-snug">
-            {currentQ.question_text}
-          </h2>
+          {/* Header with Title and Marks */}
+          <div className="flex items-start font-anek justify-between gap-4 mb-8">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug">
+              {currentQ.question_text}
+            </h2>
+            <div className="shrink-0 inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 shadow-sm">
+              <Award className="w-4 h-4" />
+              <span className="font-bold text-sm whitespace-nowrap">{currentQ.points} Mark{currentQ.points !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
 
           <div className="space-y-3 mt-auto">
             {currentQ.options.map(opt => {

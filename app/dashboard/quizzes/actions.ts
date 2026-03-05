@@ -166,3 +166,74 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
     return { error: error.message || "Failed to update quiz." };
   }
 }
+
+// --- 3. DELETE QUIZ ---
+export async function deleteQuiz(quizId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    // Because of ON DELETE CASCADE in Supabase, this automatically deletes
+    // all related questions, options, and submissions!
+    const { error } = await supabase
+      .from('quizzes')
+      .delete()
+      .eq('id', quizId)
+      .eq('creator_id', user.id);
+
+    if (error) throw error;
+
+    revalidatePath('/dashboard/quizzes');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error: any) {
+    console.error("Delete error:", error);
+    return { error: "Failed to delete quiz." };
+  }
+}
+
+// --- 4. GET EXPORT DATA ---
+export async function getQuizExportData(quizId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    // 1. Fetch Quiz
+    const { data: quiz, error: quizErr } = await supabase
+      .from('quizzes')
+      .select('*')
+      .eq('id', quizId)
+      .eq('creator_id', user.id)
+      .single();
+
+    if (quizErr || !quiz) throw new Error("Quiz not found.");
+
+    // 2. Fetch Questions & Options
+    const { data: questions } = await supabase
+      .from('questions')
+      .select('*')
+      .eq('quiz_id', quizId)
+      .order('sort_order', { ascending: true });
+
+    const { data: options } = await supabase
+      .from('options')
+      .select('*')
+      .in('question_id', questions?.map(q => q.id) || []);
+
+    // 3. Fetch Submissions
+    const { data: submissions } = await supabase
+      .from('quiz_submissions')
+      .select('*')
+      .eq('quiz_id', quizId)
+      .order('score', { ascending: false });
+
+    return { success: true, quiz, questions: questions || [], options: options || [], submissions: submissions || [] };
+  } catch (error: any) {
+    console.error("Export error:", error);
+    return { error: "Failed to fetch export data." };
+  }
+}
