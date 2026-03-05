@@ -33,6 +33,9 @@ export default function BulkUploadTools({ onImport, onError }: Props) {
           const questionText = String(row[0] || "").trim();
           const correctText = String(row[5] || "").trim();
 
+          // NEW: Parse points from column 7 (index 6), default to 1 if empty/invalid
+          const pointsValue = parseInt(String(row[6])) || 1;
+
           const rawOptions = [row[1], row[2], row[3], row[4]].filter(Boolean);
 
           const options = rawOptions.map(optText => {
@@ -48,7 +51,7 @@ export default function BulkUploadTools({ onImport, onError }: Props) {
             importedQuestions.push({
               id: crypto.randomUUID(),
               text: questionText,
-              points: 1,
+              points: pointsValue, // Pass the parsed points
               options: options,
             });
           }
@@ -71,9 +74,9 @@ export default function BulkUploadTools({ onImport, onError }: Props) {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Question", "Option 1", "Option 2", "Option 3", "Option 4", "Correct Answer"],
-      ["What is the capital of France?", "London", "Berlin", "Paris", "Madrid", "Paris"],
-      ["Which planet is known as the Red Planet?", "Earth", "Mars", "Jupiter", "Venus", "Mars"]
+      ["Question", "Option 1", "Option 2", "Option 3", "Option 4", "Correct Answer", "Marks (Optional)"],
+      ["What is the capital of France?", "London", "Berlin", "Paris", "Madrid", "Paris", "1"],
+      ["Which planet is known as the Red Planet?", "Earth", "Mars", "Jupiter", "Venus", "Mars", "2"]
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");

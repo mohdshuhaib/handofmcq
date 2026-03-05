@@ -6,15 +6,29 @@ export async function getPublicQuiz(quizId: string) {
   const supabase = await createClient();
 
   // 1. Fetch the quiz details
-  // UPDATED: Now asking for time_limit_seconds and intro_fields
   const { data: quiz, error: quizError } = await supabase
     .from('quizzes')
-    .select('id, title, description, time_limit_seconds, require_password, quiz_password, shuffle_questions, is_published, intro_fields, show_results')
+    .select('id, title, description, time_limit_seconds, require_password, quiz_password, shuffle_questions, is_published, intro_fields, show_results, start_time, end_time')
     .eq('id', quizId)
     .single();
 
   if (quizError || !quiz || !quiz.is_published) {
     return { error: "Quiz not found or not currently active." };
+  }
+
+  // --- NEW: SERVER SIDE TIME VALIDATION ---
+  const now = new Date();
+
+  // Check if it hasn't started yet
+  if (quiz.start_time && now < new Date(quiz.start_time)) {
+    const startDate = new Date(quiz.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return { error: `This quiz hasn't started yet. It will be available beginning on ${startDate}.` };
+  }
+
+  // Check if it has already ended
+  if (quiz.end_time && now > new Date(quiz.end_time)) {
+    const endDate = new Date(quiz.end_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return { error: `This quiz has already ended. It closed on ${endDate} and is no longer accepting responses.` };
   }
 
   // 2. Fetch Questions

@@ -3,6 +3,12 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
+// Helper to safely convert local datetime to an ISO string for Supabase
+const formatToISO = (dateStr: string | null) => {
+  if (!dateStr) return null;
+  return new Date(dateStr).toISOString();
+};
+
 // --- 1. CREATE NEW QUIZ ---
 export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   const supabase = await createClient();
@@ -13,20 +19,22 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   }
 
   try {
-    // 1. Insert the Quiz (UPDATED with new fields)
+    // 1. Insert the Quiz (UPDATED with start_time and end_time)
     const { data: newQuiz, error: quizError } = await supabase
       .from('quizzes')
       .insert({
         creator_id: user.id,
         title: quizData.title,
         description: quizData.description,
-        time_limit_seconds: quizData.time_limit_seconds, // <-- Added this
+        time_limit_seconds: quizData.time_limit_seconds,
         require_password: quizData.require_password,
         quiz_password: quizData.quiz_password,
         shuffle_questions: quizData.shuffle_questions,
         is_published: quizData.is_published,
         intro_fields: quizData.intro_fields || [],
-        show_results: quizData.show_results !== undefined ? quizData.show_results : true,       // <-- Added this
+        show_results: quizData.show_results !== undefined ? quizData.show_results : true,
+        start_time: formatToISO(quizData.start_time), // <-- NEW
+        end_time: formatToISO(quizData.end_time)      // <-- NEW
       })
       .select()
       .single();
@@ -42,7 +50,7 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
         .insert({
           quiz_id: newQuiz.id,
           question_text: q.text,
-          points: q.points,
+          points: q.points, // This now accurately saves custom points!
           sort_order: i,
         })
         .select()
@@ -80,19 +88,21 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
   if (!user) return { error: "Unauthorized" };
 
   try {
-    // 1. Update the Quiz Settings (UPDATED with new fields)
+    // 1. Update the Quiz Settings
     const { error: quizError } = await supabase
       .from('quizzes')
       .update({
         title: quizData.title,
         description: quizData.description,
-        time_limit_seconds: quizData.time_limit_seconds, // <-- Added this
+        time_limit_seconds: quizData.time_limit_seconds,
         require_password: quizData.require_password,
         quiz_password: quizData.quiz_password,
         shuffle_questions: quizData.shuffle_questions,
         is_published: quizData.is_published,
-        intro_fields: quizData.intro_fields || [],       // <-- Added this
+        intro_fields: quizData.intro_fields || [],
         show_results: quizData.show_results !== undefined ? quizData.show_results : true,
+        start_time: formatToISO(quizData.start_time), // <-- NEW
+        end_time: formatToISO(quizData.end_time)      // <-- NEW
       })
       .eq('id', quizId)
       .eq('creator_id', user.id);

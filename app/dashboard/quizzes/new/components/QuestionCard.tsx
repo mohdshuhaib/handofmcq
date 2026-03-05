@@ -1,4 +1,4 @@
-import { Trash2, CheckCircle2, Circle, Plus } from "lucide-react";
+import { Trash2, CheckCircle2, Circle, Plus, Award } from "lucide-react";
 import { Question } from "../types";
 
 interface Props {
@@ -12,6 +12,9 @@ interface Props {
 export default function QuestionCard({ question, index, canDelete, onChange, onDelete }: Props) {
 
   const updateText = (text: string) => onChange({ ...question, text });
+
+  // NEW: Update points function
+  const updatePoints = (points: number) => onChange({ ...question, points });
 
   const addOption = () => {
     onChange({
@@ -44,16 +47,34 @@ export default function QuestionCard({ question, index, canDelete, onChange, onD
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-      <div className="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center">
+      <div className="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center gap-4">
         <span className="font-bold text-slate-700">Question {index + 1}</span>
-        {canDelete && (
-          <button
-            onClick={onDelete}
-            className="text-slate-400 hover:text-red-600 transition-colors p-1"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-        )}
+
+        <div className="flex items-center gap-3">
+          {/* NEW: Custom Points Input */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="bg-slate-100 px-3 py-1.5 border-r border-slate-200 flex items-center gap-1.5 text-slate-600">
+              <Award className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase tracking-wider">Marks</span>
+            </div>
+            <input
+              type="number"
+              min="1"
+              value={question.points || 1}
+              onChange={(e) => updatePoints(parseInt(e.target.value) || 1)}
+              className="w-16 px-3 py-1.5 text-sm font-bold text-slate-900 outline-none text-center focus:bg-blue-50 transition-colors"
+            />
+          </div>
+
+          {canDelete && (
+            <button
+              onClick={onDelete}
+              className="text-slate-400 hover:text-red-600 transition-colors p-1"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="p-6 space-y-6 font-anek">

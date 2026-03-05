@@ -7,7 +7,6 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { saveFullQuiz } from "../actions";
 import { QuizState, Question } from "./types";
 
-// Import our new components
 import QuizSettings from "./components/QuizSettings";
 import BulkUploadTools from "./components/BulkUploadTools";
 import QuestionCard from "./components/QuestionCard";
@@ -19,9 +18,10 @@ export default function CreateQuizPage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const [quiz, setQuiz] = useState<QuizState>({
-  title: "", description: "", time_limit_seconds: null, require_password: false, // <-- NEW
-  quiz_password: "", shuffle_questions: false, show_results: true, is_published: false, intro_fields: []
-});
+    title: "", description: "", time_limit_seconds: null, require_password: false,
+    quiz_password: "", shuffle_questions: false, show_results: true, is_published: false, intro_fields: [],
+    start_time: null, end_time: null // <-- NEW
+  });
 
   const [questions, setQuestions] = useState<Question[]>([{
     id: crypto.randomUUID(), text: "", points: 1,
@@ -33,7 +33,7 @@ export default function CreateQuizPage() {
 
   const addManualQuestion = () => {
     setQuestions([...questions, {
-      id: crypto.randomUUID(), text: "", points: 1,
+      id: crypto.randomUUID(), text: "", points: 1, // Default points is 1
       options: [
         { id: crypto.randomUUID(), text: "", isCorrect: true },
         { id: crypto.randomUUID(), text: "", isCorrect: false },

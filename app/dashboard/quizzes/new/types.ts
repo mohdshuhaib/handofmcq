@@ -11,8 +11,6 @@ export interface Question {
   options: Option[];
 }
 
-// Add these to your types.ts file
-
 export interface IntroField {
   id: string;
   label: string;
@@ -24,11 +22,13 @@ export interface IntroField {
 export interface QuizState {
   title: string;
   description: string;
-  time_limit_seconds: number | null; // Replaced time_limit
+  time_limit_seconds: number | null;
   require_password: boolean;
   quiz_password: string;
   shuffle_questions: boolean;
   is_published: boolean;
-  intro_fields: IntroField[]; // NEW: The dynamic form builder
-  show_results: boolean; // <-- NEW
+  intro_fields: IntroField[];
+  show_results: boolean;
+  start_time: string | null; // NEW: Schedule Start
+  end_time: string | null;   // NEW: Schedule End
 }

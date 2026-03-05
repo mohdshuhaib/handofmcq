@@ -1,4 +1,4 @@
-import { Settings2, Trash2, UserPlus } from "lucide-react";
+import { Settings2, Trash2, UserPlus, CalendarDays } from "lucide-react";
 import { QuizState, IntroField } from "../types";
 
 interface Props {
@@ -42,10 +42,36 @@ export default function QuizSettings({ quiz, onChange }: Props) {
             />
           </div>
 
+          {/* --- NEW: SCHEDULING SECTION --- */}
+          <div className="grid sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
+                <CalendarDays className="w-4 h-4 text-slate-400" /> Start Time (Optional)
+              </label>
+              <input
+                type="datetime-local"
+                value={quiz.start_time || ""}
+                onChange={e => updateField("start_time", e.target.value || null)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
+                <CalendarDays className="w-4 h-4 text-slate-400" /> End Time (Optional)
+              </label>
+              <input
+                type="datetime-local"
+                value={quiz.end_time || ""}
+                onChange={e => updateField("end_time", e.target.value || null)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none"
+              />
+            </div>
+          </div>
+
           <div className="grid sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
             {/* Precise Timer Inputs */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Time Limit</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Time Limit (Optional)</label>
               <div className="flex items-center gap-2">
 
                 {/* Minutes Input */}
@@ -92,7 +118,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
               </div>
             </div>
 
-            <div className="flex items-center mt-6">
+            <div className="flex flex-col justify-center gap-4 mt-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -100,12 +126,9 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                   onChange={e => updateField("shuffle_questions", e.target.checked)}
                   className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                 />
-                <span className="text-sm font-medium text-slate-700">Shuffle Questions for respondents</span>
+                <span className="text-sm font-medium text-slate-700">Shuffle Questions</span>
               </label>
-            </div>
 
-            {/* Show Results Toggle */}
-            <div className="flex items-center mt-2 sm:mt-6">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -113,7 +136,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                   onChange={e => updateField("show_results", e.target.checked)}
                   className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                 />
-                <span className="text-sm font-medium text-slate-700">Show score to candidates after submission</span>
+                <span className="text-sm font-medium text-slate-700">Show score after submission</span>
               </label>
             </div>
           </div>
@@ -163,9 +186,7 @@ export default function QuizSettings({ quiz, onChange }: Props) {
           )}
 
           {quiz.intro_fields?.map((field, index) => (
-            // FIX 1: Wrapper is now flex-col so the dropdown input naturally falls to the next line
             <div key={field.id} className="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-
               <div className="flex flex-col sm:flex-row gap-3 items-start w-full">
                 <input
                   type="text"
@@ -211,13 +232,11 @@ export default function QuizSettings({ quiz, onChange }: Props) {
                 </div>
               </div>
 
-              {/* FIX 2: Show Option Editor safely under the row */}
               {field.type === 'select' && (
                 <div className="w-full pl-1 border-l-4 border-blue-400 mt-1">
                   <input
                     type="text"
                     placeholder="Separate options with commas (e.g. Math, Science, Art)"
-                    // FIX 3: Join and split using just a comma to perfectly preserve typing without eating characters
                     value={field.options?.join(",") || ""}
                     onChange={(e) => {
                       const newFields = [...quiz.intro_fields];
