@@ -12,7 +12,6 @@ interface Option { id: string; option_text: string; }
 interface Question { id: string; question_text: string; points: number; options: Option[]; }
 interface IntroField { id: string; label: string; type: string; required: boolean; options?: string[]; }
 
-// FIX: Updated the interface to accept 'null' values from the Supabase database
 interface Quiz {
   id: string;
   title: string;
@@ -28,17 +27,15 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   const [phase, setPhase] = useState<'gate' | 'intro' | 'active' | 'finished'>('gate');
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false); // NEW: Loading state
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(quiz.time_limit_seconds || null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  // --- UI States ---
   const [showGridDrawer, setShowGridDrawer] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  // --- Time Tracking & Warning Modal States ---
   const [startTime, setStartTime] = useState<number>(0);
   const [warnings, setWarnings] = useState(0);
   const [warningModal, setWarningModal] = useState<{ show: boolean, currentCount: number } | null>(null);
@@ -80,6 +77,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     setIsSubmitting(false);
   }, [answers, introDetails, isSubmitting, quiz.id, warnings, getDisplayName, startTime]);
 
+  // FIX: Separate effect to watch the timer and trigger completion without fighting the render cycle
   useEffect(() => {
     if (phase !== 'active') return;
 
@@ -90,19 +88,35 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       handleComplete(true);
     }
 
+    return () => {
+      clearInterval(timer);
+    };
+  }, [phase, timeLeft, handleComplete]);
+
+  // FIX: Dedicated effect to watch warnings and trigger completion safely AFTER render
+  useEffect(() => {
+    if (warnings >= MAX_WARNINGS && phase === 'active') {
+      handleComplete(true);
+    }
+  }, [warnings, phase, handleComplete]);
+
+  // FIX: Dedicated effect for visibility and context menu tracking
+  useEffect(() => {
+    if (phase !== 'active') return;
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
+        // Only update the state here. Do NOT call handleComplete inside the setState callback.
         setWarnings(prev => {
           const newCount = prev + 1;
-          if (newCount >= MAX_WARNINGS) {
-             handleComplete(true);
-          } else {
+          if (newCount < MAX_WARNINGS) {
              setWarningModal({ show: true, currentCount: newCount });
           }
           return newCount;
         });
       }
     };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const disableContext = (e: Event) => e.preventDefault();
@@ -110,12 +124,11 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     document.addEventListener("copy", disableContext);
 
     return () => {
-      clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("contextmenu", disableContext);
       document.removeEventListener("copy", disableContext);
     };
-  }, [phase, timeLeft, handleComplete]);
+  }, [phase]);
 
   const startQuiz = async () => {
     try { await document.documentElement.requestFullscreen(); } catch (e) {}
@@ -127,7 +140,6 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     e.preventDefault();
     setAuthError("");
 
-    // BUG FIX: Verify the password securely on the server via Server Action
     if (quiz.require_password) {
       setIsVerifyingPassword(true);
       try {
@@ -169,69 +181,87 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     : 100;
 
   // ==========================================
-  // 1. GATEWAY PHASE (MODERN SPLIT DESIGN)
+  // 1. GATEWAY PHASE (SPLIT LAYOUT)
   // ==========================================
   if (phase === 'gate') {
     return (
-      <div className="min-h-screen bg-slate-50 relative flex flex-col items-center selection:bg-blue-200">
-        {/* Top Dark Gradient Background */}
-        <div className="absolute top-0 w-full h-[45vh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] shadow-xl"></div>
+      <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row relative selection:bg-blue-200">
 
-        <div className="relative z-10 w-full max-w-md pt-[15vh] px-5 pb-12">
-          {/* Floating Logo Icon */}
-          <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 rotate-3 transition-transform hover:rotate-0">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <Lock className="w-6 h-6" />
+        {/* Top/Left Dark Gradient Panel */}
+        <div className="absolute lg:relative top-0 w-full lg:w-5/12 h-[45vh] lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] lg:rounded-none lg:rounded-r-[3rem] shadow-xl z-0 overflow-hidden">
+          {/* Abstract glows */}
+          <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl"></div>
+
+          {/* Desktop-only graphic */}
+          <div className="hidden lg:flex flex-col items-center justify-center h-full text-white px-12 text-center relative z-10 animate-in fade-in duration-700">
+            <div className="w-24 h-24 bg-blue-500/20 rounded-[1.5rem] flex items-center justify-center mb-8 border border-blue-400/30 backdrop-blur-md shadow-2xl">
+              <Lock className="w-12 h-12 text-blue-400" />
             </div>
+            <h2 className="text-4xl font-black mb-4 tracking-tight">Secure Gateway</h2>
+            <p className="text-slate-400 text-lg max-w-sm leading-relaxed">Please verify your identity to securely access this assessment. All sessions are strictly monitored.</p>
           </div>
+        </div>
 
-          {/* Main White Card */}
-          <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 pt-16 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 duration-500">
-            <h1 className="text-2xl font-black text-slate-900 text-center mb-2 tracking-tight">{quiz.title}</h1>
-            <p className="text-slate-500 text-center mb-8 text-sm font-medium">{quiz.description}</p>
+        {/* Right Content Panel */}
+        <div className="relative z-10 w-full lg:w-7/12 flex items-center justify-center pt-[15vh] lg:pt-0 px-5 pb-12 lg:pb-0 min-h-screen">
+          <div className="w-full max-w-md">
 
-            {authError && (
-              <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm font-semibold rounded-xl text-center border border-red-100 flex items-center justify-center gap-2 animate-in shake">
-                <AlertTriangle className="w-4 h-4" /> {authError}
+            {/* Floating Logo Icon (Mobile Only) */}
+            <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 rotate-3 transition-transform lg:hidden">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <Lock className="w-6 h-6" />
               </div>
-            )}
+            </div>
 
-            <form onSubmit={handleGateSubmit} className="space-y-5">
-              {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name *</label>
-                  <input type="text" required value={introDetails['default_name'] || ""} onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder="Enter your name" />
+            {/* Main White Card */}
+            <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 sm:p-10 pt-16 lg:pt-10 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 lg:slide-in-from-right-8 duration-500">
+              <h1 className="text-2xl font-black text-slate-900 text-center mb-2 tracking-tight">{quiz.title}</h1>
+              <p className="text-slate-500 text-center mb-8 text-sm font-medium">{quiz.description}</p>
+
+              {authError && (
+                <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm font-semibold rounded-xl text-center border border-red-100 flex items-center justify-center gap-2 animate-in shake">
+                  <AlertTriangle className="w-4 h-4" /> {authError}
                 </div>
               )}
-              {quiz.intro_fields?.map((field) => (
-                <div key={field.id}>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{field.label} *</label>
-                  {field.type === 'select' ? (
-                    <select required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium appearance-none">
-                      <option value="" disabled>Select an option...</option>
-                      {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  ) : (
-                    <input type={field.type} required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder={`Enter ${field.label.toLowerCase()}`} />
-                  )}
+
+              <form onSubmit={handleGateSubmit} className="space-y-5">
+                {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name *</label>
+                    <input type="text" required value={introDetails['default_name'] || ""} onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder="Enter your name" />
+                  </div>
+                )}
+                {quiz.intro_fields?.map((field) => (
+                  <div key={field.id}>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{field.label} *</label>
+                    {field.type === 'select' ? (
+                      <select required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium appearance-none">
+                        <option value="" disabled>Select an option...</option>
+                        {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    ) : (
+                      <input type={field.type} required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder={`Enter ${field.label.toLowerCase()}`} />
+                    )}
+                  </div>
+                ))}
+                {quiz.require_password && (
+                  <div className="pt-5 border-t border-slate-100 mt-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Secure Password *</label>
+                    <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium text-center tracking-widest" placeholder="••••••••" />
+                  </div>
+                )}
+                <div className="pt-2">
+                  <button type="submit" disabled={isVerifyingPassword} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-70 disabled:scale-100 flex items-center justify-center gap-2 group">
+                    {isVerifyingPassword ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</>
+                    ) : (
+                      <>Continue to Rules <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
+                    )}
+                  </button>
                 </div>
-              ))}
-              {quiz.require_password && (
-                <div className="pt-5 border-t border-slate-100 mt-2">
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Secure Password *</label>
-                  <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium text-center tracking-widest" placeholder="••••••••" />
-                </div>
-              )}
-              <div className="pt-2">
-                <button type="submit" disabled={isVerifyingPassword} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-70 disabled:scale-100 flex items-center justify-center gap-2 group">
-                  {isVerifyingPassword ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</>
-                  ) : (
-                    <>Continue to Rules <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
-                  )}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -243,52 +273,71 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   // ==========================================
   if (phase === 'intro') {
     return (
-      <div className="min-h-screen bg-slate-50 relative flex flex-col items-center selection:bg-blue-200">
-        <div className="absolute top-0 w-full h-[45vh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] shadow-xl"></div>
+      <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row relative selection:bg-blue-200">
 
-        <div className="relative z-10 w-full max-w-xl pt-[12vh] px-5 pb-12">
-          {/* Floating Logo Icon */}
-          <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 -rotate-3 transition-transform hover:rotate-0">
-            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
-              <ShieldAlert className="w-6 h-6" />
+        {/* Top/Left Dark Gradient Panel */}
+        <div className="absolute lg:relative top-0 w-full lg:w-5/12 h-[45vh] lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] lg:rounded-none lg:rounded-r-[3rem] shadow-xl z-0 overflow-hidden">
+          {/* Abstract glows */}
+          <div className="absolute -top-20 -left-20 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-red-500/10 rounded-full blur-3xl"></div>
+
+          {/* Desktop-only graphic */}
+          <div className="hidden lg:flex flex-col items-center justify-center h-full text-white px-12 text-center relative z-10 animate-in fade-in duration-700">
+            <div className="w-24 h-24 bg-orange-500/20 rounded-[1.5rem] flex items-center justify-center mb-8 border border-orange-400/30 backdrop-blur-md shadow-2xl">
+              <ShieldAlert className="w-12 h-12 text-orange-400" />
             </div>
+            <h2 className="text-4xl font-black mb-4 tracking-tight">Proctoring Active</h2>
+            <p className="text-slate-400 text-lg max-w-sm leading-relaxed">Read the guidelines carefully. Anti-cheat measures are active and will strictly monitor tab switching.</p>
           </div>
+        </div>
 
-          {/* Main White Card */}
-          <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 sm:p-10 pt-16 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 duration-500">
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 text-center mb-8 tracking-tight">Proctored Examination</h2>
+        {/* Right Content Panel */}
+        <div className="relative z-10 w-full lg:w-7/12 flex items-center justify-center pt-[12vh] lg:pt-0 px-5 pb-12 lg:pb-0 min-h-screen">
+          <div className="w-full max-w-xl">
 
-            <div className="space-y-4 mb-10">
-              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5" /></div>
-                <div>
-                  <h4 className="font-bold text-slate-900">Verified Identity</h4>
-                  <p className="text-sm text-slate-500 font-medium mt-0.5">You are registered as <span className="text-slate-900">{getDisplayName()}</span>.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><Clock className="w-5 h-5" /></div>
-                <div>
-                  <h4 className="font-bold text-slate-900">Time Limit</h4>
-                  <p className="text-sm text-slate-500 font-medium mt-0.5">
-                    {quiz.time_limit_seconds ? `You have exactly ${formatTimeText(quiz.time_limit_seconds)} to finish.` : 'There is no time limit for this quiz.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 p-4 rounded-2xl bg-orange-50 border border-orange-100">
-                <div className="w-10 h-10 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center shrink-0"><AlertTriangle className="w-5 h-5" /></div>
-                <div>
-                  <h4 className="font-bold text-slate-900">Anti-Cheat Enabled</h4>
-                  <p className="text-sm text-slate-600 font-medium mt-0.5">Switching tabs or apps will trigger a warning. Max {MAX_WARNINGS} warnings allowed.</p>
-                </div>
+            {/* Floating Logo Icon (Mobile Only) */}
+            <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 -rotate-3 transition-transform lg:hidden">
+              <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+                <ShieldAlert className="w-6 h-6" />
               </div>
             </div>
 
-            <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20 transition-all active:scale-[0.98] text-lg">
-              I Agree, Start Test
-            </button>
+            {/* Main White Card */}
+            <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 sm:p-10 pt-16 lg:pt-10 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 lg:slide-in-from-right-8 duration-500">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 text-center mb-8 tracking-tight">Examination Rules</h2>
+
+              <div className="space-y-4 mb-10">
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5" /></div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">Verified Identity</h4>
+                    <p className="text-sm text-slate-500 font-medium mt-0.5">You are registered as <span className="text-slate-900">{getDisplayName()}</span>.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><Clock className="w-5 h-5" /></div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">Time Limit</h4>
+                    <p className="text-sm text-slate-500 font-medium mt-0.5">
+                      {quiz.time_limit_seconds ? `You have exactly ${formatTimeText(quiz.time_limit_seconds)} to finish.` : 'There is no time limit for this quiz.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-orange-50 border border-orange-100">
+                  <div className="w-10 h-10 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center shrink-0"><AlertTriangle className="w-5 h-5" /></div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">Anti-Cheat Enabled</h4>
+                    <p className="text-sm text-slate-600 font-medium mt-0.5">Switching tabs or apps will trigger a warning. Max {MAX_WARNINGS} warnings allowed.</p>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20 transition-all active:scale-[0.98] text-lg">
+                I Agree, Start Test
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -452,7 +501,8 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
       </div>
 
       {/* --- PART 3: MAIN QUESTION CARD --- */}
-      <div className="relative z-10 flex-1 px-4 sm:px-6 pb-[100px] overflow-y-auto">
+      {/* Added extra padding bottom to account for the floating navigation pill */}
+      <div className="relative z-10 flex-1 px-4 sm:px-6 pb-[120px] sm:pb-[140px] overflow-y-auto">
         <div className="bg-white rounded-[2rem] p-6 sm:p-8 md:p-10 shadow-2xl max-w-3xl mx-auto min-h-[50vh] flex flex-col animate-in slide-in-from-right-4 fade-in duration-300" key={currentQ.id}>
 
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-8 leading-snug">
@@ -492,22 +542,22 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
         </div>
       </div>
 
-      {/* --- PART 4: BOTTOM NAVIGATION --- */}
-      <div className="absolute bottom-0 left-0 w-full bg-slate-900/80 backdrop-blur-xl border-t border-slate-700/50 p-4 pb-[env(safe-area-inset-bottom,1rem)] z-30">
-        <div className="max-w-3xl mx-auto flex items-center justify-between px-2">
+      {/* --- PART 4: FLOATING BOTTOM NAVIGATION --- */}
+      <div className="absolute bottom-4 sm:bottom-6 left-0 w-full px-4 sm:px-6 z-30 pointer-events-none">
+        <div className="max-w-3xl mx-auto bg-slate-900/90 backdrop-blur-xl border border-slate-700/50 p-2 sm:p-3 rounded-3xl shadow-2xl flex items-center justify-between pointer-events-auto">
           {/* Prev Button */}
           <button
             onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))}
             disabled={currentQuestionIndex === 0}
-            className="w-14 h-14 rounded-2xl bg-slate-800 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 hover:bg-slate-700 active:scale-95 transition-all border border-slate-700"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-800 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 hover:bg-slate-700 active:scale-95 transition-all border border-slate-600"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
           {/* Grid Toggle Button */}
           <button
             onClick={() => setShowGridDrawer(true)}
-            className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 hover:text-white active:scale-95 transition-all border border-slate-700 shadow-sm"
+            className="flex items-center gap-2 px-5 py-3 sm:px-6 sm:py-4 rounded-2xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 hover:text-white active:scale-95 transition-all border border-slate-600 shadow-sm"
           >
             <LayoutGrid className="w-5 h-5" />
             <span className="hidden sm:inline">Overview</span>
@@ -517,9 +567,9 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
           <button
             onClick={() => setCurrentQuestionIndex(i => Math.min(questions.length - 1, i + 1))}
             disabled={currentQuestionIndex === questions.length - 1}
-            className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 disabled:bg-slate-800 hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 disabled:bg-slate-800 hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
           >
-            <ArrowRight className="w-6 h-6" />
+            <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
       </div>
@@ -547,7 +597,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
 
             {/* Questions Grid */}
             <div className="overflow-y-auto overflow-x-hidden flex-1 no-scrollbar max-w-xl mx-auto w-full">
-              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-3 sm:gap-4 p-1">
+              <div className="grid grid-cols-7 sm:grid-cols-9 md:grid-cols-10 gap-2 sm:gap-3 p-1">
                 {questions.map((q, i) => {
                   const isAnswered = !!answers[q.id];
                   const isCurrent = currentQuestionIndex === i;
@@ -558,7 +608,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
                         setCurrentQuestionIndex(i);
                         setShowGridDrawer(false);
                       }}
-                      className={`relative w-full aspect-square flex items-center justify-center text-lg font-black rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`relative w-full aspect-square flex items-center justify-center text-sm sm:text-base font-bold rounded-full transition-all duration-200 active:scale-95 ${
                         isAnswered
                           ? 'bg-gradient-to-br from-green-400 to-green-600 text-white shadow-lg shadow-green-500/30 border-none'
                           : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20'
@@ -567,7 +617,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
                       {i + 1}
                       {/* Current Indicator Ring */}
                       {isCurrent && (
-                        <div className="absolute -inset-1.5 border-2 border-white/50 rounded-full animate-pulse"></div>
+                        <div className="absolute -inset-1 border-2 border-white/50 rounded-full animate-pulse"></div>
                       )}
                     </button>
                   );
