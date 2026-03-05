@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, XCircle, Search, Medal } from "lucide-react";
 
-export default function SubmissionsTable({ submissions, questions }: { submissions: any[], questions: any[] }) {
+// FIX: Add 'quiz' to the props interface to map IDs back to labels
+export default function SubmissionsTable({ submissions, questions, quiz }: { submissions: any[], questions: any[], quiz: any }) {
   const [selectedSub, setSelectedSub] = useState<any | null>(null);
 
   const formatTime = (seconds: number) => {
@@ -43,10 +44,24 @@ export default function SubmissionsTable({ submissions, questions }: { submissio
                     </td>
                     <td className="p-4">
                       <p className="font-bold text-slate-900">{sub.respondent_name}</p>
-                      {/* Show custom intro fields like Email or Class beneath the name */}
-                      {sub.respondent_details && Object.values(sub.respondent_details).map((detail: any, i) => (
-                        <span key={i} className="text-xs text-slate-500 mr-2">{detail}</span>
-                      ))}
+
+                      {/* FIX: Show exact labels and prevent duplicating the Name */}
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {sub.respondent_details && Object.entries(sub.respondent_details).map(([key, value], i) => {
+                          // Prevent showing 'default_name' or any field value that perfectly matches the name
+                          if (key === 'default_name' || value === sub.respondent_name) return null;
+
+                          // Lookup the real label
+                          const fieldDef = quiz.intro_fields?.find((f: any) => f.id === key);
+                          const label = fieldDef ? fieldDef.label : key;
+
+                          return (
+                            <span key={i} className="inline-block text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
+                              {label}: <span className="font-normal">{String(value)}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
                     </td>
                     <td className="p-4">
                       <div className="flex flex-col">
@@ -92,7 +107,7 @@ export default function SubmissionsTable({ submissions, questions }: { submissio
                 <h3 className="text-xl font-bold text-slate-900">{selectedSub.respondent_name}'s Paper</h3>
                 <p className="text-sm font-medium text-slate-500">Score: {selectedSub.score} | Time: {formatTime(selectedSub.time_taken_seconds)}</p>
               </div>
-              <button onClick={() => setSelectedSub(null)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm">
+              <button onClick={() => setSelectedSub(null)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm border border-slate-200">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
@@ -116,12 +131,12 @@ export default function SubmissionsTable({ submissions, questions }: { submissio
                         const isSelected = selectedOptionId === opt.id;
                         return (
                           <div key={opt.id} className={`p-2 rounded-lg text-sm flex items-center justify-between ${
-                            opt.is_correct ? 'bg-green-100 text-green-800 font-bold' :
-                            isSelected && !isCorrect ? 'bg-red-100 text-red-800 font-bold' : 'bg-white border text-slate-600'
+                            opt.is_correct ? 'bg-green-100 text-green-800 font-bold border border-green-200' :
+                            isSelected && !isCorrect ? 'bg-red-100 text-red-800 font-bold border border-red-200' : 'bg-white border border-slate-200 text-slate-600'
                           }`}>
                             <span>{opt.option_text}</span>
-                            {opt.is_correct && <span className="text-[10px] uppercase tracking-wider">Correct Answer</span>}
-                            {isSelected && !opt.is_correct && <span className="text-[10px] uppercase tracking-wider">They Picked</span>}
+                            {opt.is_correct && <span className="text-[10px] uppercase tracking-wider bg-green-200/50 px-2 py-0.5 rounded">Correct Answer</span>}
+                            {isSelected && !opt.is_correct && <span className="text-[10px] uppercase tracking-wider bg-red-200/50 px-2 py-0.5 rounded">They Picked</span>}
                           </div>
                         );
                       })}

@@ -43,10 +43,18 @@ export default function ResultsClient({ quiz, submissions, questions }: Props) {
         "Submitted": new Date(sub.submitted_at).toLocaleString()
       };
 
-      // Extract dynamic intro fields dynamically into the Excel!
+      // Exact Custom Data mapping (Using real labels instead of IDs)
       if (sub.respondent_details) {
         Object.entries(sub.respondent_details).forEach(([key, value]) => {
-          if (key !== 'default_name') baseData[`Custom: ${key}`] = value;
+          // Skip default name or exact duplicate of the main respondent name
+          if (key === 'default_name' || value === sub.respondent_name) return;
+
+          // Map ID to the actual custom label creator wrote
+          const fieldDef = quiz.intro_fields?.find((f: any) => f.id === key);
+          const label = fieldDef ? fieldDef.label : key;
+
+          // Show pure data
+          baseData[label] = value;
         });
       }
 
@@ -78,7 +86,8 @@ export default function ResultsClient({ quiz, submissions, questions }: Props) {
       <StatCards submissions={rankedSubmissions} />
 
       <h2 className="text-xl font-bold text-slate-900 mb-4 mt-8">Live Leaderboard</h2>
-      <SubmissionsTable submissions={rankedSubmissions} questions={questions} />
+      {/* Pass the quiz object here so we can read the field labels! */}
+      <SubmissionsTable submissions={rankedSubmissions} questions={questions} quiz={quiz} />
 
       <div className="mt-12">
         <QuestionAnalytics questions={questions} submissions={rankedSubmissions} />
