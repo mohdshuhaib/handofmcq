@@ -1,27 +1,44 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, Clock, AlertTriangle, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
-import { submitQuizAndGrade } from "../actions";
+import {
+  Lock, Clock, AlertTriangle, CheckCircle2, ShieldAlert,
+  XCircle, ArrowLeft, ArrowRight, LayoutGrid, Check, Sparkles, X, ChevronRight, Loader2
+} from "lucide-react";
+import { submitQuizAndGrade, verifyQuizPassword } from "../actions";
+import Link from "next/link";
 
 interface Option { id: string; option_text: string; }
 interface Question { id: string; question_text: string; points: number; options: Option[]; }
 interface IntroField { id: string; label: string; type: string; required: boolean; options?: string[]; }
+
+// FIX: Updated the interface to accept 'null' values from the Supabase database
 interface Quiz {
-  id: string; title: string; description: string;
-  time_limit_seconds: number | null; require_password: boolean;
-  intro_fields?: IntroField[]; show_results: boolean;
+  id: string;
+  title: string;
+  description: string | null;
+  time_limit_seconds: number | null;
+  require_password: boolean;
+  quiz_password?: string | null;
+  intro_fields?: IntroField[] | null;
+  show_results: boolean;
 }
 
 export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions: Question[] }) {
   const [phase, setPhase] = useState<'gate' | 'intro' | 'active' | 'finished'>('gate');
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false); // NEW: Loading state
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(quiz.time_limit_seconds || null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  // --- NEW: Time Tracking & Warning Modal States ---
+  // --- UI States ---
+  const [showGridDrawer, setShowGridDrawer] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+
+  // --- Time Tracking & Warning Modal States ---
   const [startTime, setStartTime] = useState<number>(0);
   const [warnings, setWarnings] = useState(0);
   const [warningModal, setWarningModal] = useState<{ show: boolean, currentCount: number } | null>(null);
@@ -42,14 +59,13 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
   const handleComplete = useCallback(async (forced: boolean = false) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setShowSubmitModal(false);
 
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
 
     const respondentName = getDisplayName();
-
-    // Calculate exact time taken in seconds
     const timeTakenSeconds = Math.floor((Date.now() - startTime) / 1000);
 
     const res = await submitQuizAndGrade(quiz.id, respondentName, answers, warnings, introDetails, timeTakenSeconds);
@@ -57,7 +73,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     if (res.success) {
       setResult({ score: res.score!, total: res.totalPoints! });
       setPhase('finished');
-      setWarningModal(null); // Clear any open warnings
+      setWarningModal(null);
     } else {
       alert("Error submitting quiz. Please notify your instructor.");
     }
@@ -81,7 +97,6 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
           if (newCount >= MAX_WARNINGS) {
              handleComplete(true);
           } else {
-             // Show Modern Warning Modal instead of alert()
              setWarningModal({ show: true, currentCount: newCount });
           }
           return newCount;
@@ -104,12 +119,32 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
 
   const startQuiz = async () => {
     try { await document.documentElement.requestFullscreen(); } catch (e) {}
-    setStartTime(Date.now()); // START THE CLOCK
+    setStartTime(Date.now());
     setPhase('active');
   };
 
-  const handleGateSubmit = (e: React.FormEvent) => {
+  const handleGateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError("");
+
+    // BUG FIX: Verify the password securely on the server via Server Action
+    if (quiz.require_password) {
+      setIsVerifyingPassword(true);
+      try {
+        const isValid = await verifyQuizPassword(quiz.id, password.trim());
+        if (!isValid) {
+          setAuthError("Incorrect password. Please try again.");
+          setIsVerifyingPassword(false);
+          return;
+        }
+      } catch (error) {
+        setAuthError("An error occurred. Please try again.");
+        setIsVerifyingPassword(false);
+        return;
+      }
+      setIsVerifyingPassword(false);
+    }
+
     setPhase('intro');
   };
 
@@ -127,173 +162,424 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
     return `${s} seconds`;
   };
 
-  // 1. GATEWAY VIEW
+  const currentQ = questions[currentQuestionIndex];
+  const answeredCount = Object.keys(answers).length;
+  const timeProgressPercent = timeLeft !== null && quiz.time_limit_seconds
+    ? (timeLeft / quiz.time_limit_seconds) * 100
+    : 100;
+
+  // ==========================================
+  // 1. GATEWAY PHASE (MODERN SPLIT DESIGN)
+  // ==========================================
   if (phase === 'gate') {
     return (
-      <div className="flex min-h-screen font-anek items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">{quiz.title}</h1>
-          <p className="text-slate-600 mb-6 text-sm">{quiz.description}</p>
-          <form onSubmit={handleGateSubmit} className="space-y-4">
-            {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                <input type="text" required value={introDetails['default_name'] || ""} onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
+      <div className="min-h-screen bg-slate-50 relative flex flex-col items-center selection:bg-blue-200">
+        {/* Top Dark Gradient Background */}
+        <div className="absolute top-0 w-full h-[45vh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] shadow-xl"></div>
+
+        <div className="relative z-10 w-full max-w-md pt-[15vh] px-5 pb-12">
+          {/* Floating Logo Icon */}
+          <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 rotate-3 transition-transform hover:rotate-0">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+              <Lock className="w-6 h-6" />
+            </div>
+          </div>
+
+          {/* Main White Card */}
+          <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 pt-16 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <h1 className="text-2xl font-black text-slate-900 text-center mb-2 tracking-tight">{quiz.title}</h1>
+            <p className="text-slate-500 text-center mb-8 text-sm font-medium">{quiz.description}</p>
+
+            {authError && (
+              <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm font-semibold rounded-xl text-center border border-red-100 flex items-center justify-center gap-2 animate-in shake">
+                <AlertTriangle className="w-4 h-4" /> {authError}
               </div>
             )}
-            {quiz.intro_fields?.map((field) => (
-              <div key={field.id}>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{field.label} {field.required && '*'}</label>
-                {field.type === 'select' ? (
-                  <select required={field.required} value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none bg-white">
-                    <option value="" disabled>Select an option...</option>
-                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                ) : (
-                  <input type={field.type} required={field.required} value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
-                )}
+
+            <form onSubmit={handleGateSubmit} className="space-y-5">
+              {(!quiz.intro_fields || quiz.intro_fields.length === 0) && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name *</label>
+                  <input type="text" required value={introDetails['default_name'] || ""} onChange={e => setIntroDetails({...introDetails, 'default_name': e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder="Enter your name" />
+                </div>
+              )}
+              {quiz.intro_fields?.map((field) => (
+                <div key={field.id}>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{field.label} *</label>
+                  {field.type === 'select' ? (
+                    <select required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium appearance-none">
+                      <option value="" disabled>Select an option...</option>
+                      {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  ) : (
+                    <input type={field.type} required value={introDetails[field.id] || ""} onChange={e => setIntroDetails({...introDetails, [field.id]: e.target.value})} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium" placeholder={`Enter ${field.label.toLowerCase()}`} />
+                  )}
+                </div>
+              ))}
+              {quiz.require_password && (
+                <div className="pt-5 border-t border-slate-100 mt-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Secure Password *</label>
+                  <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl border-0 bg-slate-50 px-4 py-3.5 text-slate-900 ring-1 ring-inset ring-slate-200 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none transition-all font-medium text-center tracking-widest" placeholder="••••••••" />
+                </div>
+              )}
+              <div className="pt-2">
+                <button type="submit" disabled={isVerifyingPassword} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-70 disabled:scale-100 flex items-center justify-center gap-2 group">
+                  {isVerifyingPassword ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</>
+                  ) : (
+                    <>Continue to Rules <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
+                  )}
+                </button>
               </div>
-            ))}
-            {quiz.require_password && (
-              <div className="pt-4 border-t border-slate-100 mt-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Quiz Password</label>
-                <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-600 outline-none" />
-              </div>
-            )}
-            <button type="submit" className="w-full py-3 mt-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">Continue</button>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
     );
   }
 
-  // 2. INTRO VIEW
+  // ==========================================
+  // 2. INTRO PHASE (RULES & PROCTORING)
+  // ==========================================
   if (phase === 'intro') {
     return (
-      <div className="flex min-h-screen font-anek items-center justify-center p-6">
-        <div className="w-full max-w-2xl bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
-            <ShieldAlert className="w-8 h-8 text-blue-600" />
-            <h2 className="text-2xl font-bold text-slate-900">Proctored Examination Rules</h2>
+      <div className="min-h-screen bg-slate-50 relative flex flex-col items-center selection:bg-blue-200">
+        <div className="absolute top-0 w-full h-[45vh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 rounded-b-[3rem] shadow-xl"></div>
+
+        <div className="relative z-10 w-full max-w-xl pt-[12vh] px-5 pb-12">
+          {/* Floating Logo Icon */}
+          <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-xl shadow-slate-900/20 mx-auto flex items-center justify-center -mb-10 relative z-20 border border-slate-100 -rotate-3 transition-transform hover:rotate-0">
+            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
           </div>
-          <ul className="space-y-4 mb-8 text-slate-700">
-            <li className="flex gap-3"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /> <strong>Identity:</strong> You are taking this test as {getDisplayName()}.</li>
-            <li className="flex gap-3"><Clock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Time Limit:</strong> {quiz.time_limit_seconds ? `${formatTimeText(quiz.time_limit_seconds)}. Test auto-submits when time expires.` : 'No time limit.'}</li>
-            <li className="flex gap-3"><Lock className="w-6 h-6 text-slate-500 shrink-0" /> <strong>Fullscreen Required:</strong> Browser will enter full screen mode.</li>
-            <li className="flex gap-3"><AlertTriangle className="w-6 h-6 text-orange-500 shrink-0" /> <strong>Anti-Cheat Active:</strong> Switching tabs or apps is recorded. You have {MAX_WARNINGS} warnings before instant termination.</li>
-          </ul>
-          <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors text-lg">I Agree, Start Test</button>
+
+          {/* Main White Card */}
+          <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] p-8 sm:p-10 pt-16 border border-slate-100 w-full animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 text-center mb-8 tracking-tight">Proctored Examination</h2>
+
+            <div className="space-y-4 mb-10">
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5" /></div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Verified Identity</h4>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">You are registered as <span className="text-slate-900">{getDisplayName()}</span>.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><Clock className="w-5 h-5" /></div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Time Limit</h4>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">
+                    {quiz.time_limit_seconds ? `You have exactly ${formatTimeText(quiz.time_limit_seconds)} to finish.` : 'There is no time limit for this quiz.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-orange-50 border border-orange-100">
+                <div className="w-10 h-10 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center shrink-0"><AlertTriangle className="w-5 h-5" /></div>
+                <div>
+                  <h4 className="font-bold text-slate-900">Anti-Cheat Enabled</h4>
+                  <p className="text-sm text-slate-600 font-medium mt-0.5">Switching tabs or apps will trigger a warning. Max {MAX_WARNINGS} warnings allowed.</p>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={startQuiz} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20 transition-all active:scale-[0.98] text-lg">
+              I Agree, Start Test
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // 3. FINISHED VIEW
+  // ==========================================
+  // 3. FINISHED PHASE (SUCCESS & PROMO)
+  // ==========================================
   if (phase === 'finished') {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Test Submitted!</h2>
-          <p className="text-slate-600 mb-6">Thank you, {getDisplayName()}. Your responses have been recorded safely.</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 selection:bg-blue-200">
+        <div className="w-full max-w-md bg-white p-8 sm:p-10 rounded-[2rem] shadow-xl border border-slate-200 text-center animate-in zoom-in-95 duration-500 relative overflow-hidden">
 
-          {/* Only show result if the creator enabled it */}
-          {quiz.show_results ? (
-            result && (
-              <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Your Score</p>
-                <p className="text-4xl font-extrabold text-blue-600 mt-2">{result.score} <span className="text-xl text-slate-400">/ {result.total}</span></p>
-              </div>
-            )
-          ) : (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
-              Results are hidden for this quiz. Contact your instructor for your final grade.
+          {/* Confetti-like background subtle circles */}
+          <div className="absolute -top-10 -left-10 w-32 h-32 bg-green-100 rounded-full mix-blend-multiply filter blur-2xl opacity-70"></div>
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-blue-100 rounded-full mix-blend-multiply filter blur-2xl opacity-70"></div>
+
+          <div className="relative z-10">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <CheckCircle2 className="w-10 h-10 text-green-600" />
             </div>
-          )}
+            <h2 className="text-3xl font-black text-slate-900 mb-2">Test Submitted!</h2>
+            <p className="text-slate-500 font-medium mb-8">Thank you, {getDisplayName()}. Your responses have been safely recorded.</p>
+
+            {quiz.show_results ? (
+              result && (
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm mb-2">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Final Score</p>
+                  <p className="text-5xl font-black text-blue-600 tracking-tight">{result.score} <span className="text-2xl text-slate-400">/ {result.total}</span></p>
+                </div>
+              )
+            ) : (
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm font-medium text-slate-600 mb-2">
+                Scores are currently hidden by the instructor.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* --- PROMO BANNER --- */}
+        <div className="mt-8 text-center animate-in fade-in slide-in-from-bottom-4 delay-300 duration-500">
+          <p className="text-slate-500 text-sm font-medium">Build your own secure, proctored exams for free.</p>
+          <Link href="https://handofmcq.vercel.app" target="_blank" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm text-sm font-bold text-slate-900 hover:bg-slate-50 hover:text-blue-600 transition-all group">
+            <Sparkles className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Try Hand of MCQ
+          </Link>
         </div>
       </div>
     );
   }
 
-  // 4. ACTIVE TEST VIEW
+  // ==========================================
+  // 4. ACTIVE TEST PHASE (IMMERSIVE DARK MODE)
+  // ==========================================
   return (
-    <div className="pb-32 select-none relative">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 flex flex-col relative select-none font-sans overflow-hidden">
 
-      {/* --- MODERN WARNING MODAL --- */}
+      {/* BACKGROUND DECORATION */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-blue-600/10 blur-[100px]"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-indigo-600/10 blur-[100px]"></div>
+      </div>
+
+      {/* --- WARNING MODAL --- */}
       {warningModal?.show && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-2 border-red-500">
-            <div className="bg-red-50 p-6 text-center border-b border-red-100">
-              <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-red-700">Proctoring Warning!</h3>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-red-50 p-6 text-center border-b border-red-100 flex flex-col items-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4"><XCircle className="w-8 h-8 text-red-600" /></div>
+              <h3 className="text-xl font-black text-red-700">Proctoring Alert!</h3>
             </div>
-            <div className="p-6 text-center">
-              <p className="text-slate-700 mb-2 font-medium">
-                You navigated away from the quiz tab. This is considered suspicious behavior.
+            <div className="p-6 text-center bg-white">
+              <p className="text-slate-600 mb-2 font-medium text-sm leading-relaxed">
+                You navigated away from the quiz tab. This is suspicious behavior.
               </p>
-              <p className="text-red-600 font-bold text-lg mb-6">
-                Warning {warningModal.currentCount} of {MAX_WARNINGS}
-              </p>
-              <button
-                onClick={() => setWarningModal(null)}
-                className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
-              >
-                I Understand, Return to Test
+              <div className="inline-block px-4 py-2 bg-red-100 text-red-700 font-black rounded-lg mb-6 tracking-wide">
+                Warning {warningModal.currentCount} / {MAX_WARNINGS}
+              </div>
+              <button onClick={() => setWarningModal(null)} className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors active:scale-95">
+                I Understand, Return
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Sticky Proctoring Header */}
-      <div className="sticky font-anek top-0 left-0 w-full bg-white border-b border-slate-200 px-6 py-4 shadow-sm z-50 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-900 truncate hidden sm:block">{quiz.title}</h2>
-
-        <div className="flex items-center gap-6">
-          {warnings > 0 && (
-            <div className="flex items-center gap-2 text-orange-600 font-semibold text-sm bg-orange-50 px-3 py-1.5 rounded-full">
-              <AlertTriangle className="w-4 h-4" />
-              Warnings: {warnings}/{MAX_WARNINGS}
+      {/* --- SUBMIT CONFIRMATION MODAL --- */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 p-6 sm:p-8 text-center">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+              <CheckCircle2 className="w-8 h-8 text-blue-600" />
             </div>
-          )}
+            <h3 className="text-xl font-black text-slate-900 mb-2">Submit Quiz?</h3>
 
-          {timeLeft !== null && (
-            <div className={`flex items-center gap-2 font-mono text-xl font-black ${timeLeft < 60 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
-              <Clock className="w-6 h-6" />
-              {formatTime(timeLeft)}
+            {questions.length - answeredCount > 0 ? (
+              <p className="text-slate-500 font-medium mb-8 text-sm leading-relaxed">
+                You still have <span className="text-red-500 font-bold">{questions.length - answeredCount} unattempted</span> questions. Are you sure you want to finish?
+              </p>
+            ) : (
+              <p className="text-slate-500 font-medium mb-8 text-sm leading-relaxed">
+                You have answered all questions. Ready to submit?
+              </p>
+            )}
+
+            <div className="flex gap-3 w-full">
+              <button onClick={() => setShowSubmitModal(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => handleComplete(false)} className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/30">
+                Confirm
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PART 1: TOP HEADER --- */}
+      <header className="relative z-20 bg-white px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between rounded-b-[2rem] shadow-lg shadow-black/10 mx-2 sm:mx-4 mt-2">
+        <h1 className="font-black text-slate-900 text-lg truncate pr-4 max-w-[65%] tracking-tight">{quiz.title}</h1>
+        <button
+          onClick={() => setShowSubmitModal(true)}
+          className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:bg-slate-800 transition-colors active:scale-95 shrink-0"
+        >
+          Submit
+        </button>
+      </header>
+
+      {/* --- PART 2: INFO BAR (Dark Background) --- */}
+      <div className="relative z-10 px-6 pt-6 pb-4 flex items-center justify-between gap-4">
+        {/* Left: Question Number */}
+        <div className="text-slate-300 font-bold text-lg tabular-nums shrink-0 w-12">
+          Q. {currentQuestionIndex + 1}
+        </div>
+
+        {/* Center: Time Progress */}
+        <div className="flex-1 max-w-sm mx-auto flex flex-col items-center gap-1.5">
+          {timeLeft !== null ? (
+            <>
+              <div className="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30 backdrop-blur-sm">
+                <div
+                  className={`h-full transition-all duration-1000 ease-linear rounded-full ${timeLeft < 60 ? 'bg-red-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.max(0, timeProgressPercent)}%` }}
+                ></div>
+              </div>
+              <span className={`text-xs font-bold font-mono tracking-widest ${timeLeft < 60 ? 'text-red-400 animate-pulse' : 'text-slate-400'}`}>
+                {formatTime(timeLeft)}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50">
+              No Time Limit
+            </span>
           )}
+        </div>
+
+        {/* Right: Answered Ratio */}
+        <div className="text-slate-400 font-bold text-sm text-right shrink-0 w-12">
+          <span className="text-white">{answeredCount}</span><span className="opacity-50">/{questions.length}</span>
         </div>
       </div>
 
-      {/* Questions List */}
-      <div className="max-w-3xl font-anek mx-auto p-6 space-y-8 mt-6">
-        {questions.map((q, index) => (
-          <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-6 leading-relaxed">
-              <span className="text-blue-600 mr-2">{index + 1}.</span> {q.question_text}
-            </h3>
-            <div className="space-y-3">
-              {q.options.map(opt => (
-                <label key={opt.id} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${ answers[q.id] === opt.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50' }`}>
-                  <input type="radio" name={q.id} value={opt.id} checked={answers[q.id] === opt.id} onChange={() => setAnswers({ ...answers, [q.id]: opt.id })} className="w-5 h-5 text-blue-600 border-slate-300 focus:ring-blue-600" />
-                  <span className="text-slate-700 font-medium">{opt.option_text}</span>
-                </label>
-              ))}
-            </div>
+      {/* --- PART 3: MAIN QUESTION CARD --- */}
+      <div className="relative z-10 flex-1 px-4 sm:px-6 pb-[100px] overflow-y-auto">
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 md:p-10 shadow-2xl max-w-3xl mx-auto min-h-[50vh] flex flex-col animate-in slide-in-from-right-4 fade-in duration-300" key={currentQ.id}>
+
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-8 leading-snug">
+            {currentQ.question_text}
+          </h2>
+
+          <div className="space-y-3 mt-auto">
+            {currentQ.options.map(opt => {
+              const isSelected = answers[currentQ.id] === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setAnswers({ ...answers, [currentQ.id]: opt.id })}
+                  className={`w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 relative overflow-hidden group active:scale-[0.99] ${
+                    isSelected
+                      ? 'border-transparent text-white shadow-lg shadow-blue-500/20'
+                      : 'border-slate-200 hover:border-blue-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  {/* Selected Gradient Background */}
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 z-0"></div>
+                  )}
+
+                  <div className="relative z-10 flex items-center justify-between gap-4">
+                    <span className="font-semibold text-[15px] sm:text-base leading-snug">{opt.option_text}</span>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                      isSelected ? 'border-white bg-white/20 text-white' : 'border-slate-300 group-hover:border-blue-300 text-transparent'
+                    }`}>
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        ))}
+        </div>
       </div>
 
-      {/* Submission Footer */}
-      <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 z-40">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <p className="text-sm text-slate-500 font-medium">Answered: {Object.keys(answers).length} / {questions.length}</p>
-          <button onClick={() => handleComplete(false)} disabled={isSubmitting} className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50">
-            {isSubmitting ? "Submitting..." : "Submit Test"}
+      {/* --- PART 4: BOTTOM NAVIGATION --- */}
+      <div className="absolute bottom-0 left-0 w-full bg-slate-900/80 backdrop-blur-xl border-t border-slate-700/50 p-4 pb-[env(safe-area-inset-bottom,1rem)] z-30">
+        <div className="max-w-3xl mx-auto flex items-center justify-between px-2">
+          {/* Prev Button */}
+          <button
+            onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))}
+            disabled={currentQuestionIndex === 0}
+            className="w-14 h-14 rounded-2xl bg-slate-800 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 hover:bg-slate-700 active:scale-95 transition-all border border-slate-700"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+
+          {/* Grid Toggle Button */}
+          <button
+            onClick={() => setShowGridDrawer(true)}
+            className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 hover:text-white active:scale-95 transition-all border border-slate-700 shadow-sm"
+          >
+            <LayoutGrid className="w-5 h-5" />
+            <span className="hidden sm:inline">Overview</span>
+          </button>
+
+          {/* Next Button */}
+          <button
+            onClick={() => setCurrentQuestionIndex(i => Math.min(questions.length - 1, i + 1))}
+            disabled={currentQuestionIndex === questions.length - 1}
+            className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center disabled:opacity-30 disabled:scale-100 disabled:bg-slate-800 hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
+          >
+            <ArrowRight className="w-6 h-6" />
           </button>
         </div>
       </div>
+
+      {/* --- GRID DRAWER MODAL --- */}
+      {showGridDrawer && (
+        <>
+          <div
+            className="fixed inset-0 z-[60] bg-slate-950/60 backdrop-blur-sm animate-in fade-in"
+            onClick={() => setShowGridDrawer(false)}
+          ></div>
+          <div className="fixed bottom-0 left-0 w-full bg-slate-900 rounded-t-[2rem] z-[70] p-6 pb-[calc(env(safe-area-inset-bottom,1rem)+1rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t border-slate-800 animate-in slide-in-from-bottom-full duration-300 ease-out max-h-[80vh] flex flex-col">
+
+            {/* Drawer Header (Stats) */}
+            <div className="flex items-center justify-between mb-8 max-w-xl mx-auto w-full">
+              <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-4 py-2 rounded-xl">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span className="text-green-500 font-bold text-sm">Attempted ({answeredCount})</span>
+              </div>
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
+                <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                <span className="text-red-500 font-bold text-sm">Unattempted ({questions.length - answeredCount})</span>
+              </div>
+            </div>
+
+            {/* Questions Grid */}
+            <div className="overflow-y-auto overflow-x-hidden flex-1 no-scrollbar max-w-xl mx-auto w-full">
+              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-3 sm:gap-4 p-1">
+                {questions.map((q, i) => {
+                  const isAnswered = !!answers[q.id];
+                  const isCurrent = currentQuestionIndex === i;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => {
+                        setCurrentQuestionIndex(i);
+                        setShowGridDrawer(false);
+                      }}
+                      className={`relative w-full aspect-square flex items-center justify-center text-lg font-black rounded-full transition-all duration-200 active:scale-95 ${
+                        isAnswered
+                          ? 'bg-gradient-to-br from-green-400 to-green-600 text-white shadow-lg shadow-green-500/30 border-none'
+                          : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20'
+                      }`}
+                    >
+                      {i + 1}
+                      {/* Current Indicator Ring */}
+                      {isCurrent && (
+                        <div className="absolute -inset-1.5 border-2 border-white/50 rounded-full animate-pulse"></div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Close handle indicator for visual completeness */}
+            <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mt-6"></div>
+          </div>
+        </>
+      )}
 
     </div>
   );

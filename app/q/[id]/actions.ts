@@ -110,3 +110,17 @@ export async function submitQuizAndGrade(
 
   return { success: true, score, totalPoints };
 }
+
+export async function verifyQuizPassword(quizId: string, passwordAttempt: string) {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from('quizzes')
+    .select('quiz_password')
+    .eq('id', quizId)
+    .single();
+
+  if (!data) return false;
+
+  return data.quiz_password === passwordAttempt;
+}
