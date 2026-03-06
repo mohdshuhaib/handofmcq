@@ -13,32 +13,29 @@ export async function getPublicQuiz(quizId: string) {
     .single();
 
   if (quizError || !quiz || !quiz.is_published) {
-    return { error: "Quiz not found or not currently active." };
+    return { status: "unavailable", error: "Quiz not found or not currently active." };
   }
 
-  // --- FIX: SERVER SIDE TIME VALIDATION (Using exact Date math) ---
   const now = new Date();
 
   // Check if it hasn't started yet
   if (quiz.start_time && now < new Date(quiz.start_time)) {
-    // Format explicitly in Indian Standard Time (IST)
-    const startDate = new Date(quiz.start_time).toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
-    return { error: `This quiz hasn't started yet. It will be available beginning on ${startDate} (IST).` };
+    return {
+      status: "not_started",
+      startTime: quiz.start_time,
+      quizTitle: quiz.title,
+      error: "Quiz hasn't started yet."
+    };
   }
 
   // Check if it has already ended
   if (quiz.end_time && now > new Date(quiz.end_time)) {
-    // Format explicitly in Indian Standard Time (IST)
-    const endDate = new Date(quiz.end_time).toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
-    return { error: `This quiz has already ended. It closed on ${endDate} (IST) and is no longer accepting responses.` };
+    return {
+      status: "ended",
+      endTime: quiz.end_time,
+      quizTitle: quiz.title,
+      error: "Quiz has concluded."
+    };
   }
 
   // 2. Fetch Questions
@@ -48,7 +45,7 @@ export async function getPublicQuiz(quizId: string) {
     .eq('quiz_id', quizId)
     .order('sort_order', { ascending: true });
 
-  if (!questions) return { error: "No questions found." };
+  if (!questions) return { status: "unavailable", error: "No questions found." };
 
   // 3. Fetch Options (CRITICAL: Do NOT select 'is_correct' here to prevent DevTools cheating)
   const { data: options } = await supabase
@@ -73,7 +70,7 @@ export async function getPublicQuiz(quizId: string) {
     quiz_password: quiz.require_password ? "PROTECTED" : null,
   };
 
-  return { quiz: secureQuizConfig, questions: formattedQuestions };
+  return { status: "active", quiz: secureQuizConfig, questions: formattedQuestions };
 }
 
 export async function submitQuizAndGrade(

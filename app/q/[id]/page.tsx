@@ -1,5 +1,6 @@
 import { getPublicQuiz } from "./actions";
 import QuizEngine from "./components/QuizEngine";
+import QuizStatus from "./components/QuizStatus";
 
 export default async function TakeQuizPage({
   params,
@@ -12,22 +13,24 @@ export default async function TakeQuizPage({
   // Ensure the id is a flat string
   const quizId = Array.isArray(resolvedParams.id) ? resolvedParams.id[0] : resolvedParams.id;
 
-  const { quiz, questions, error } = await getPublicQuiz(quizId);
+  const { status, quiz, questions, startTime, endTime, quizTitle } = await getPublicQuiz(quizId);
 
-  if (error || !quiz || !questions) {
+  // If the status is not explicitly 'active', show our new interactive Status screen!
+  if (status !== 'active') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md text-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Quiz Unavailable</h1>
-          <p className="text-slate-600">{error || "This quiz does not exist or has been closed."}</p>
-        </div>
-      </div>
+      <QuizStatus
+        status={status as "unavailable" | "not_started" | "ended"}
+        startTime={startTime}
+        endTime={endTime}
+        quizTitle={quizTitle}
+      />
     );
   }
 
+  // If active, render the Quiz Engine normally
   return (
     <main className="min-h-screen bg-slate-50 selection:bg-blue-200">
-      <QuizEngine quiz={quiz} questions={questions} />
+      <QuizEngine quiz={quiz!} questions={questions!} />
     </main>
   );
 }
