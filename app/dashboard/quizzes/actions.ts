@@ -19,7 +19,6 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   }
 
   try {
-    // 1. Insert the Quiz (UPDATED with start_time and end_time)
     const { data: newQuiz, error: quizError } = await supabase
       .from('quizzes')
       .insert({
@@ -33,15 +32,14 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
         is_published: quizData.is_published,
         intro_fields: quizData.intro_fields || [],
         show_results: quizData.show_results !== undefined ? quizData.show_results : true,
-        start_time: formatToISO(quizData.start_time), // <-- NEW
-        end_time: formatToISO(quizData.end_time)      // <-- NEW
+        start_time: formatToISO(quizData.start_time),
+        end_time: formatToISO(quizData.end_time)
       })
       .select()
       .single();
 
     if (quizError) throw quizError;
 
-    // 2. Insert Questions and their Options
     for (let i = 0; i < questionsData.length; i++) {
       const q = questionsData[i];
 
@@ -50,7 +48,7 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
         .insert({
           quiz_id: newQuiz.id,
           question_text: q.text,
-          points: q.points, // This now accurately saves custom points!
+          points: q.points,
           sort_order: i,
         })
         .select()
@@ -80,7 +78,7 @@ export async function saveFullQuiz(quizData: any, questionsData: any[]) {
   }
 }
 
-// --- 2. UPDATE EXISTING QUIZ ---
+// --- 2. UPDATE EXISTING QUIZ (WITH STRICT AUTO-REGRADING) ---
 export async function updateFullQuiz(quizId: string, quizData: any, questionsData: any[]) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -101,15 +99,15 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
         is_published: quizData.is_published,
         intro_fields: quizData.intro_fields || [],
         show_results: quizData.show_results !== undefined ? quizData.show_results : true,
-        start_time: formatToISO(quizData.start_time), // <-- NEW
-        end_time: formatToISO(quizData.end_time)      // <-- NEW
+        start_time: formatToISO(quizData.start_time),
+        end_time: formatToISO(quizData.end_time)
       })
       .eq('id', quizId)
       .eq('creator_id', user.id);
 
     if (quizError) throw quizError;
 
-    // 2. Handle Deletions
+    // 2. Handle Deletions cleanly
     const currentQuestionIds = questionsData.map(q => q.id);
     if (currentQuestionIds.length > 0) {
       await supabase
@@ -119,10 +117,11 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
         .not('id', 'in', `(${currentQuestionIds.join(',')})`);
     }
 
-    // 3. Upsert Questions and Options
+    // 3. FORCE Upsert Questions and Options
     for (let i = 0; i < questionsData.length; i++) {
       const q = questionsData[i];
 
+      // Use onConflict to strictly overwrite existing data!
       const { error: qError } = await supabase
         .from('questions')
         .upsert({
@@ -131,7 +130,7 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
           question_text: q.text,
           points: q.points,
           sort_order: i,
-        });
+        }, { onConflict: 'id' });
 
       if (qError) throw qError;
 
@@ -151,14 +150,55 @@ export async function updateFullQuiz(quizId: string, quizData: any, questionsDat
         is_correct: opt.isCorrect,
       }));
 
+      // Use onConflict to strictly overwrite the correct answers!
       const { error: optError } = await supabase
         .from('options')
-        .upsert(optionsToUpsert);
+        .upsert(optionsToUpsert, { onConflict: 'id' });
 
       if (optError) throw optError;
     }
 
+    // --- 4. STRICT AUTO RE-GRADE ---
+    const { data: submissions, error: subFetchErr } = await supabase
+      .from('quiz_submissions')
+      .select('id, answers')
+      .eq('quiz_id', quizId);
+
+    if (subFetchErr) console.error("Auto-Regrade fetch error:", subFetchErr);
+
+    if (submissions && submissions.length > 0) {
+      for (const sub of submissions) {
+        let newScore = 0;
+        let newTotalPoints = 0;
+
+        // Regrade based on the fresh data from the UI
+        questionsData.forEach((q: any) => {
+          const pointValue = q.points || 1;
+          newTotalPoints += pointValue;
+
+          const selectedOptionId = sub.answers[q.id];
+          const correctOption = q.options.find((o: any) => o.isCorrect === true);
+
+          if (selectedOptionId && correctOption && selectedOptionId === correctOption.id) {
+            newScore += pointValue;
+          }
+        });
+
+        // Push corrected scores back to DB
+        const { error: updateErr } = await supabase
+          .from('quiz_submissions')
+          .update({ score: newScore, total_points: newTotalPoints })
+          .eq('id', sub.id);
+
+        if (updateErr) console.error("Failed to update score for", sub.id, updateErr);
+      }
+    }
+
+    // Force Next.js to aggressively clear its caches so UI updates instantly
     revalidatePath('/dashboard/quizzes');
+    revalidatePath(`/dashboard/quizzes/${quizId}/edit`);
+    revalidatePath(`/dashboard/results/${quizId}`);
+
     return { success: true };
 
   } catch (error: any) {
@@ -175,8 +215,6 @@ export async function deleteQuiz(quizId: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    // Because of ON DELETE CASCADE in Supabase, this automatically deletes
-    // all related questions, options, and submissions!
     const { error } = await supabase
       .from('quizzes')
       .delete()
@@ -202,7 +240,6 @@ export async function getQuizExportData(quizId: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    // 1. Fetch Quiz
     const { data: quiz, error: quizErr } = await supabase
       .from('quizzes')
       .select('*')
@@ -212,7 +249,6 @@ export async function getQuizExportData(quizId: string) {
 
     if (quizErr || !quiz) throw new Error("Quiz not found.");
 
-    // 2. Fetch Questions & Options
     const { data: questions } = await supabase
       .from('questions')
       .select('*')
@@ -224,7 +260,6 @@ export async function getQuizExportData(quizId: string) {
       .select('*')
       .in('question_id', questions?.map(q => q.id) || []);
 
-    // 3. Fetch Submissions
     const { data: submissions } = await supabase
       .from('quiz_submissions')
       .select('*')
