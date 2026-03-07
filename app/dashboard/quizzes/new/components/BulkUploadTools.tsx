@@ -26,35 +26,44 @@ export default function BulkUploadTools({ onImport, onError }: Props) {
 
         const importedQuestions: Question[] = [];
 
+        // Start reading from row 1 (skipping header row 0)
         for (let i = 1; i < data.length; i++) {
           const row = data[i];
           if (!row || !row[0]) continue;
 
           const questionText = String(row[0] || "").trim();
-          const correctText = String(row[5] || "").trim();
 
-          // NEW: Parse points from column 7 (index 6), default to 1 if empty/invalid
-          const pointsValue = parseInt(String(row[6])) || 1;
-
+          // NEW LOGIC: Row[1] is always the correct answer. Rows 2, 3, 4 are wrong options.
           const rawOptions = [row[1], row[2], row[3], row[4]].filter(Boolean);
 
-          const options = rawOptions.map(optText => {
+          // Must have at least a correct answer and one wrong answer
+          if (rawOptions.length < 2) continue;
+
+          // Map options and set the very first one (index 0) as correct
+          let options = rawOptions.map((optText, idx) => {
             const cleanOptText = String(optText).trim();
             return {
               id: crypto.randomUUID(),
               text: cleanOptText,
-              isCorrect: cleanOptText.toLowerCase() === correctText.toLowerCase()
+              isCorrect: idx === 0 // Automatically true ONLY for the first option in the row
             };
           });
 
-          if (options.length >= 2) {
-            importedQuestions.push({
-              id: crypto.randomUUID(),
-              text: questionText,
-              points: pointsValue, // Pass the parsed points
-              options: options,
-            });
+          // NEW LOGIC: Shuffle the options array so the correct answer isn't always "Option 1" in the UI
+          for (let j = options.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [options[j], options[k]] = [options[k], options[j]];
           }
+
+          // Parse points from column 6 (index 5), default to 1 if empty
+          const pointsValue = parseInt(String(row[5])) || 1;
+
+          importedQuestions.push({
+            id: crypto.randomUUID(),
+            text: questionText,
+            points: pointsValue,
+            options: options,
+          });
         }
 
         if (importedQuestions.length > 0) {
@@ -67,18 +76,24 @@ export default function BulkUploadTools({ onImport, onError }: Props) {
         onError("Error parsing the file. Please upload a valid .xlsx or .csv file.");
       }
 
+      // Reset file input so the same file can be selected again if needed
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsBinaryString(file);
   };
 
   const downloadTemplate = () => {
+    // NEW TEMPLATE FORMAT: Correct option is explicitly requested in Column B
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Question", "Option 1", "Option 2", "Option 3", "Option 4", "Correct Answer", "Marks (Optional)"],
-      ["What is the capital of France?", "London", "Berlin", "Paris", "Madrid", "Paris", "1"],
-      ["Which planet is known as the Red Planet?", "Earth", "Mars", "Jupiter", "Venus", "Mars", "2"]
+      ["Question", "Correct Option", "Wrong Option 1", "Wrong Option 2", "Wrong Option 3", "Marks (Optional)"],
+      ["What is the capital of France?", "Paris", "London", "Berlin", "Madrid", "1"],
+      ["Which planet is known as the Red Planet?", "Mars", "Earth", "Jupiter", "Venus", "2"]
     ]);
     const wb = XLSX.utils.book_new();
+
+    // Adjust column widths for better readability in Excel
+    ws["!cols"] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 15 }];
+
     XLSX.utils.book_append_sheet(wb, ws, "Template");
     XLSX.writeFile(wb, "MCQ_Template.xlsx");
   };
