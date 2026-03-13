@@ -520,7 +520,7 @@ export default function QuizEngine({ quiz, questions }: { quiz: Quiz, questions:
           </p>
 
           <Link
-            href="/"
+            href="https://handofmcq.vercel.app/"
             className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm text-sm font-bold text-slate-900 hover:bg-slate-50 hover:text-blue-600 transition-all group"
           >
             <Sparkles className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" />
