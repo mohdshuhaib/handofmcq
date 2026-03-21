@@ -30,11 +30,12 @@ export default async function DashboardPage() {
 
   const firstName = profile?.full_name?.split(' ')[0] || "User";
 
-  // 3. Fetch all Quizzes for stats
-  const { data: quizzes } = await supabase
-    .from("quizzes")
-    .select("id, title, is_published, created_at")
-    .order("created_at", { ascending: false });
+  // 3. Fetch only this user's quizzes for stats
+const { data: quizzes } = await supabase
+  .from("quizzes")
+  .select("id, title, is_published, created_at")
+  .eq("creator_id", user.id)
+  .order("created_at", { ascending: false });
 
   // 4. Fetch all Submissions (RLS automatically filters this)
   const { data: submissions } = await supabase
