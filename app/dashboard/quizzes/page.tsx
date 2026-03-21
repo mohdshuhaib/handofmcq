@@ -11,15 +11,14 @@ export default async function QuizzesPage() {
 
   if (!user) return null;
 
-  // Fetch quizzes ordered by newest first
   const { data: quizzes } = await supabase
     .from("quizzes")
     .select("*")
+    .eq("creator_id", user.id)
     .order("created_at", { ascending: false });
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">My Quizzes</h1>
@@ -34,7 +33,6 @@ export default async function QuizzesPage() {
         </Link>
       </div>
 
-      {/* Quizzes Grid - USING THE NEW COMPONENT */}
       {quizzes && quizzes.length > 0 ? (
         <div className="grid gap-6 font-anek sm:grid-cols-2 lg:grid-cols-3">
           {quizzes.map((quiz) => (
@@ -42,7 +40,6 @@ export default async function QuizzesPage() {
           ))}
         </div>
       ) : (
-        /* Empty State */
         <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 border-dashed">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
             <FileQuestion className="w-8 h-8 text-blue-600" />
